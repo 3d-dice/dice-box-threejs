@@ -1,16 +1,34 @@
+import * as THREE from "three"
+import * as CANNON from "cannon-es"
+
 import { DiceNotation } from './DiceNotation.js';
 import { DiceFactory } from './DiceFactory.js';
 import { DiceColors } from './DiceColors.js';
 import { THEMES } from './const/themes.js';
-import * as THREE from "three"
-import * as CANNON from "cannon-es"
 // import CannonDebugger from 'cannon-es-debugger'
 
-import { debounce } from "./helpers"
+import { debounce, hexToRGB } from "./helpers"
+
+const defaultConfig = {
+	framerate: (1/60),
+	sounds: false,
+	volume: 100,
+	color_spotlight: 0xefdfd5,
+	shadows: true,
+	theme_surface:  "green-felt",
+	sound_dieMaterial: 'plastic',
+	theme_customColorset: null,
+	theme_colorset: "ice",
+	theme_texture: "ice",
+	theme_material: "glass",
+	gravity_multiplier: 400,
+	light_intensity: 0.7,
+	baseScale: 100
+}
 
 class DiceBox {
 
-	constructor(element_container) {
+	constructor(element_container, options = {}) {
 		//private variables
 		this.container = document.querySelector(element_container);
 		this.dimensions = new THREE.Vector2(this.container.clientWidth, this.container.clientHeight)
@@ -64,12 +82,11 @@ class DiceBox {
 
 		//public variables
 		this.diceList = []; //'private' variable
-		this.framerate = (1/60);
-		this.sounds = false;
-		this.volume = 100;
-		this.theme = "green-felt"
-		this.surface = THEMES[this.theme].surface
-		this.dieMat = 'plastic'
+		// this.framerate = (1/60);
+		// this.sounds = false;
+		// this.volume = 100;
+		// this.theme_surface = "green-felt"
+		// this.sound_dieMaterial = 'plastic'
 		this.soundDelay = 10; // time between sound effects in ms
 		this.animstate = '';
 		this.tally = true;
@@ -82,15 +99,23 @@ class DiceBox {
 			dice: []
 		};
 
-		this.colors = {
-			ambient:  0xf0f5fb,
-			spotlight: 0xefdfd5
-		};
+		// this.colors = {
+		// 	ambient:  0xf0f5fb,
+		// 	spotlight: 0xefdfd5
+		// };
 
-		this.shadows = true
+		// this.shadows = true
 
-		this.DiceFactory = new DiceFactory();
+		Object.assign(this, defaultConfig, options)
+
+		this.DiceFactory = new DiceFactory({
+			baseScale: this.baseScale
+		});
 		this.DiceFactory.setBumpMapping(true);
+
+
+		this.surface = THEMES[this.theme_surface].surface
+
 
 	}
 
@@ -122,7 +147,7 @@ class DiceBox {
 
 		this.setDimensions(this.dimensions);
 
-		this.world.gravity.set(0, 0, -9.8 * 400);
+		this.world.gravity.set(0, 0, -9.8 * this.gravity_multiplier);
 		this.world.broadphase = new CANNON.NaiveBroadphase();
 		this.world.solver.iterations = 14;
 		this.world.allowSleep = true;
@@ -142,14 +167,14 @@ class DiceBox {
 		}
 
 		await this.loadTheme({
-			colorset: "ice",
-			texture: "ice",
-			material: "glass"
+			colorset: this.theme_colorset,
+			texture: this.theme_texture,
+			material: this.theme_material
 		})
 
 		await this.loadSounds()
 
-		this.DiceFactory.setCubeMap(`./themes/${this.theme}/`,THEMES[this.theme].cubeMap)
+		// this.DiceFactory.setCubeMap(`./themes/${this.theme_surface}/`,THEMES[this.theme_surface].cubeMap)
 
 		// this.renderer.render(this.scene, this.camera);
 
@@ -189,7 +214,12 @@ class DiceBox {
 	}
 
 	async loadTheme(themeConfig){
-		let colorData = await this.DiceColors.getColorSet(themeConfig)
+		let colorData
+		if(this.theme_customColorset){
+			colorData = await this.DiceColors.makeColorSet({...this.theme_customColorset, material: this.theme_material})
+		} else {
+			colorData = await this.DiceColors.getColorSet(themeConfig)
+		}
 		this.DiceFactory.applyColorSet(colorData)
 		this.colorData = colorData
 	}
@@ -203,16 +233,16 @@ class DiceBox {
 		}
 
 		//TODO: add dice hit noises for other materials
-		let dieMats = {
+		let dieMaterials = {
 			coin: 6,
 			metal: 12,
 			plastic: 15,
 			wood: 12
 		}
 
-		const hasDieMat = this.colorData.texture.material.match(/wood|plastic|metal/g)
+		const hassound_dieMaterial = this.colorData.texture.material.match(/wood|metal/g)
 
-		this.dieMat = hasDieMat ? this.colorData.texture.material : "plastic"
+		this.sound_dieMaterial = hassound_dieMaterial ? this.colorData.texture.material : "plastic"
 		
 
 		if(this.sounds){
@@ -225,20 +255,20 @@ class DiceBox {
 				}
 			}
 			// load the coin sounds for all sets
-			if(!this.sounds_dice.hasOwnProperty(this.dieMat)){
+			if(!this.sounds_dice.hasOwnProperty('coin')){
 				this.sounds_dice['coin'] = []
-				let numsounds = dieMats['coin']
+				let numsounds = dieMaterials['coin']
 				for (let s=1; s <= numsounds; ++s) {
 					const clip = await this.loadAudio('./sounds/dicehit/dicehit_coin'+s+'.mp3')
 					this.sounds_dice['coin'].push(clip);
 				}
 			}
-			if(!this.sounds_dice.hasOwnProperty(this.dieMat)){
-				this.sounds_dice[this.dieMat] = []
-				let numsounds = dieMats[this.dieMat]
+			if(!this.sounds_dice.hasOwnProperty(this.sound_dieMaterial)){
+				this.sounds_dice[this.sound_dieMaterial] = []
+				let numsounds = dieMaterials[this.sound_dieMaterial]
 				for (let s=1; s <= numsounds; ++s) {
-					const clip = await this.loadAudio('./sounds/dicehit/dicehit_'+this.dieMat+s+'.mp3')
-					this.sounds_dice[this.dieMat].push(clip);
+					const clip = await this.loadAudio('./sounds/dicehit/dicehit_'+this.sound_dieMaterial+s+'.mp3')
+					this.sounds_dice[this.sound_dieMaterial].push(clip);
 				}
 			}
 		}
@@ -293,7 +323,7 @@ class DiceBox {
 
 		if (this.light) this.scene.remove(this.light);
 		if (this.light_amb) this.scene.remove(this.light_amb);
-		this.light = new THREE.SpotLight(this.colors.spotlight, 0.5);
+		this.light = new THREE.SpotLight(this.color_spotlight, this.light_intensity);
 		this.light.position.set(-maxwidth / 2, maxwidth / 2, maxwidth * 3);
 		this.light.target.position.set(0, 0, 0);
 		this.light.distance = maxwidth * 5;
@@ -307,7 +337,7 @@ class DiceBox {
 		this.light.shadow.mapSize.height = 1024;
 		this.scene.add(this.light);
 
-		this.light_amb = new THREE.HemisphereLight( 0xffffbb, 0x676771, 1 );
+		this.light_amb = new THREE.HemisphereLight( 0xffffbb, 0x676771, this.light_intensity );
 		this.scene.add(this.light_amb);
 
 		if (this.desk) this.scene.remove(this.desk);
@@ -633,7 +663,7 @@ class DiceBox {
 				sound = this.sounds_dice['coin'][Math.floor(Math.random() * this.sounds_dice['coin'].length)];
 			}
 			else {
-				sound = this.sounds_dice[this.dieMat][Math.floor(Math.random() * this.sounds_dice[this.dieMat].length)];
+				sound = this.sounds_dice[this.sound_dieMaterial][Math.floor(Math.random() * this.sounds_dice[this.sound_dieMaterial].length)];
 			}
 			sound.volume = (strength * (this.volume/100));
 			sound.play().catch(error => {});

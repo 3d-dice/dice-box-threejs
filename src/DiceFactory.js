@@ -4,13 +4,16 @@ import {MATERIALTYPES} from "./const/materialtypes"
 import * as THREE from "three"
 import * as CANNON from "cannon-es"
 
+const defaultConfig = {
+	baseScale: 200,
+	bumpMapping: true
+}
+
 class DiceFactory {
 	static dice = []
-	constructor() {
+	constructor(options) {
 		// this.dice = {};
 		this.geometries = {};
-
-		this.baseScale = 100;
 
 		this.materials_cache = {};
 		this.cache_hits = 0;
@@ -22,7 +25,6 @@ class DiceFactory {
 		this.label_outline = '';
 		this.dice_texture = '';
 		this.dice_material = '';
-		this.bumpMapping = true;
 
 		this.material_options = {
 			specular: 0xffffff,
@@ -32,6 +34,8 @@ class DiceFactory {
 		};
 
 		this.cubeMap;
+
+		Object.assign(this, defaultConfig, options)
 	}
 
 	setBumpMapping(bumpMapping){

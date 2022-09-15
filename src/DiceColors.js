@@ -84,6 +84,34 @@ export class DiceColors {
 
 		return colorset;
 	}
+
+	async makeColorSet(options = {}){
+		if(this.colorsets.hasOwnProperty(options.name)) {
+			return this.colorsets[options.name]
+		}
+
+		let defaultSet = COLORSETS["white"]
+		let colorset = Object.assign({},defaultSet,options)
+		// get texture data
+		let texture = this.getTexture(colorset.texture)
+
+		// load textures
+		colorset.texture = await this.ImageLoader(texture)
+
+		if(options.material) {
+			colorset.texture.material = options.material
+		}
+
+		if(colorset.name.toLowerCase() === "white"){
+			// create a unique name
+			colorset.name = `${Date.now()}`
+		}
+
+		// save it for later
+		this.colorsets[colorset.name] = colorset
+
+		return colorset
+	}
 	
 	getTexture(texturename) {
 		if (Array.isArray(texturename)) {
