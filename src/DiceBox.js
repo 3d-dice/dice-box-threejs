@@ -7,7 +7,7 @@ import { DiceColors } from './DiceColors.js';
 import { THEMES } from './const/themes.js';
 // import CannonDebugger from 'cannon-es-debugger'
 
-import { debounce, hexToRGB } from "./helpers"
+import { debounce } from "./helpers"
 
 const defaultConfig = {
 	framerate: (1/60),
