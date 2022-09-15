@@ -1,6 +1,7 @@
 import { DiceNotation } from './DiceNotation.js';
 import { DiceFactory } from './DiceFactory.js';
 import { DiceColors } from './DiceColors.js';
+import { THEMES } from './const/themes.js';
 import * as THREE from "three"
 import * as CANNON from "cannon-es"
 // import CannonDebugger from 'cannon-es-debugger'
@@ -66,11 +67,13 @@ class DiceBox {
 		this.framerate = (1/60);
 		this.sounds = false;
 		this.volume = 100;
-		this.surface = 'felt'
+		this.theme = "green-felt"
+		this.surface = THEMES[this.theme].surface
 		this.dieMat = 'plastic'
 		this.soundDelay = 10; // time between sound effects in ms
 		this.animstate = '';
 		this.tally = true;
+
 
 		this.selector = {
 			animate: true,
@@ -124,7 +127,7 @@ class DiceBox {
 		this.world.solver.iterations = 14;
 		this.world.allowSleep = true;
 
-		this.scene.add(new THREE.HemisphereLight( 0xffffbb, 0x676771, 1 ));
+		// this.scene.add(new THREE.HemisphereLight( 0xffffbb, 0x676771, 1 ));
 
 		this.world.addContactMaterial(new CANNON.ContactMaterial( this.desk_body_material, this.dice_body_material, {mass:0,friction: 0.6, restitution: 0.5}));
 		this.world.addContactMaterial(new CANNON.ContactMaterial( this.barrier_body_material, this.dice_body_material, {mass:0, friction: 0.6, restitution: 1.0}));
@@ -139,14 +142,14 @@ class DiceBox {
 		}
 
 		await this.loadTheme({
-			colorset: "fire",
-			// texture: "cloudy",
-			material: "plastic"
+			colorset: "ice",
+			texture: "ice",
+			material: "glass"
 		})
 
 		await this.loadSounds()
 
-
+		this.DiceFactory.setCubeMap(`./themes/${this.theme}/`,THEMES[this.theme].cubeMap)
 
 		// this.renderer.render(this.scene, this.camera);
 
@@ -289,7 +292,7 @@ class DiceBox {
 
 		if (this.light) this.scene.remove(this.light);
 		if (this.light_amb) this.scene.remove(this.light_amb);
-		this.light = new THREE.SpotLight(this.colors.spotlight, 1.0);
+		this.light = new THREE.SpotLight(this.colors.spotlight, 0.5);
 		this.light.position.set(-maxwidth / 2, maxwidth / 2, maxwidth * 3);
 		this.light.target.position.set(0, 0, 0);
 		this.light.distance = maxwidth * 5;

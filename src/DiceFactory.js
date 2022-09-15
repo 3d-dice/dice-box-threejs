@@ -300,7 +300,7 @@ class DiceFactory {
 		contextBump.fillRect(0, 0, canvasBump.width, canvasBump.height);
 
 		//create underlying texture
-		if (texture && texture.name != 'none') {
+		if (texture.name != '' && texture.name != 'none') {
 			context.globalCompositeOperation = texture.composite || 'source-over';
 			context.drawImage(texture.texture, 0, 0, canvas.width, canvas.height);
 			context.globalCompositeOperation = 'source-over';
