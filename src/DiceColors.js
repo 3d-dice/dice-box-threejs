@@ -31,6 +31,7 @@ export class DiceColors {
 		return new Promise((resolve, reject) => {
 			let img = new Image()
 			img.onload = () => resolve(img)
+			img.crossOrigin = "anonymous";
 			img.src = src
 		})
 	}

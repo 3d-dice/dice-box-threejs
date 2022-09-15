@@ -248,6 +248,7 @@ class DiceBox {
 		return new Promise((resolve, reject) => {
 			let audio = new Audio()
 			audio.oncanplaythrough = () => resolve(audio)
+			audio.crossOrigin = "anonymous";
 			audio.src = src
 		})
 	}
