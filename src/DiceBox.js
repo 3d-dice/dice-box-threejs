@@ -23,7 +23,8 @@ const defaultConfig = {
 	theme_material: "glass",
 	gravity_multiplier: 400,
 	light_intensity: 0.7,
-	baseScale: 100
+	baseScale: 100,
+	strength: 1,
 }
 
 class DiceBox {
@@ -216,7 +217,7 @@ class DiceBox {
 	async loadTheme(themeConfig){
 		let colorData
 		if(this.theme_customColorset){
-			colorData = await this.DiceColors.makeColorSet({...this.theme_customColorset, material: this.theme_material})
+			colorData = await this.DiceColors.makeColorSet(this.theme_customColorset)
 		} else {
 			colorData = await this.DiceColors.getColorSet(themeConfig)
 		}
@@ -652,11 +653,6 @@ class DiceBox {
 			// also don't bother playing at low speeds
 			if (speed < 250) return;
 
-			let strength = 1;
-			let high = 12000;
-			let low = 250;
-			strength = Math.max(Math.min(speed / (high-low), 1), strength);
-
 			let sound;
 
 			if(body.diceShape === "d2") {
@@ -665,7 +661,8 @@ class DiceBox {
 			else {
 				sound = this.sounds_dice[this.sound_dieMaterial][Math.floor(Math.random() * this.sounds_dice[this.sound_dieMaterial].length)];
 			}
-			sound.volume = (strength * (this.volume/100));
+
+			sound.volume = Math.min(speed / 8000, this.volume/100)
 			sound.play().catch(error => {});
 			// if (isPlaying !== undefined) {
 			// 	isPlaying.then(() => {
@@ -684,14 +681,10 @@ class DiceBox {
 			if (speed < 250) return;
 
 			let surface = this.surface;
-			let strength = 0.1;
-			let high = 12000;
-			let low = 250;
-			strength = Math.max(Math.min(speed / (high-low), 1), strength);
 
 			let soundlist = this.sounds_table[surface];
 			let sound = soundlist[Math.floor(Math.random() * soundlist.length)];
-			sound.volume = (strength * (this.volume/100));
+			sound.volume = Math.min(speed / 8000, this.volume/100)
 			sound.play().catch(error => {});
 			// if (isPlaying !== undefined) {
 			// 	isPlaying.then(() => {
@@ -905,8 +898,8 @@ class DiceBox {
 		if (this.rolling) return;
 
 		let vector = { x: (Math.random() * 2 - 0.5) * this.display.currentWidth, y: -(Math.random() * 2 - 0.5) * this.display.currentHeight };
-		let dist = Math.sqrt(vector.x * vector.x + vector.y * vector.y);
-		let boost = (Math.random() + 3) * dist;
+		let dist = Math.sqrt(vector.x * vector.x + vector.y * vector.y) + 100;
+		let boost = (Math.random() + 3) * dist * this.strength;
 
 		return this.getNotationVectors(notation, vector, boost, dist);
 	}
