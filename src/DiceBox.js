@@ -25,6 +25,7 @@ const defaultConfig = {
 	light_intensity: 0.7,
 	baseScale: 100,
 	strength: 1,
+	onRollComplete: () => {}
 }
 
 class DiceBox {
@@ -722,20 +723,6 @@ class DiceBox {
 		dicemesh.body.sleepState = 0;
 	}
 
-	solverBodyStopped(physicsbody) {
-		let errorMargin = 6;
-		let angular = physicsbody.angularVelocity;
-		let velocity = physicsbody.velocity;
-		return (
-			Math.abs(angular.x) < errorMargin &&
-			Math.abs(angular.y) < errorMargin &&
-			Math.abs(angular.z) < errorMargin &&
-			Math.abs(velocity.x) < errorMargin &&
-			Math.abs(velocity.y) < errorMargin &&
-			Math.abs(velocity.z) < errorMargin
-		);
-	}
-
 	checkForRethrow(dicemesh) {
 		// all dice in a set/dice group will have the same function and arguments due to sorting beforehand
 		// this means the list passed in is the set of dice that need to be affected by this function
@@ -754,13 +741,16 @@ class DiceBox {
 		return reroll;
 	}
 
-	throwFinished(notationVectors) {
+	throwFinished(simulate) {
 		if (this.iteration > 1000) return true;
 		if (this.iteration < (10 / this.framerate)) {
 
+			// cycle through diceList and if any dice are still awake then return false
+			// this means with 6d6 die 6 might be asleep but die 1 is awake => return false
+			// cannot get the exact moment an individual die is complete - does this matter?
+
 			for (let i=0, len=this.diceList.length; i < len; ++i) {
 				let dicemesh = this.diceList[i];
-
 				let rethrow = false;
 
 				if (dicemesh.body.sleepState < CANNON.Body.SLEEPING) {
@@ -770,7 +760,6 @@ class DiceBox {
 				if (dicemesh.body.sleepState == CANNON.Body.SLEEPING) {
 
 					//check for forced roll
-
 					if (dicemesh.result.length == 0) {
 						dicemesh.storeRolledValue('natural');
 
@@ -802,11 +791,11 @@ class DiceBox {
 		return true;
 	}
 
-	simulateThrow(notationVectors) {
+	simulateThrow() {
 		this.animstate = 'simulate';
 		this.iteration = 0;
 		this.rolling = true;
-		while (!this.throwFinished(notationVectors)) {
+		while (!this.throwFinished(true)) {
 			++this.iteration;
 			this.world.step(this.framerate);
 		}
@@ -822,12 +811,10 @@ class DiceBox {
 
 		this.container.style.opacity = '1';
 
-		let throwFinished = this.throwFinished(notationVectors);
 		for(let i = 0; i < neededSteps; i++) {
 			this.world.step(this.framerate);
 			// this.cannonDebugger.update()
 			++this.steps;
-			throwFinished = this.throwFinished(notationVectors);
 		}
 
 		// update physics interactions visually
@@ -844,7 +831,7 @@ class DiceBox {
 
 
 		// roll finished
-		if (this.running == threadid && throwFinished) {
+		if (this.running == threadid && this.throwFinished()) {
 			this.running = false;
 			this.rolling = false;
 			if(callback) callback.call(this, notationVectors);
@@ -926,9 +913,16 @@ class DiceBox {
 			const DL = this.diceList
 			this.rollDice(toss,(results) => {
 			  // console.log("🚀 ~ this.rollDice ~ results", results)
-				const totals = this.getDiceTotals(results.vectors, DL)
-					// console.log("🚀 ~ this.rollDice ~ totals", totals)
-					return totals
+
+				// setting up a couple of ways to consume the final results
+				// call onRollComplete 
+				this.onRollComplete(results)
+
+				// dispatch an event with the results object for other UI elements to listen for
+				const event = new CustomEvent('rollComplete', {detail: results})
+				document.dispatchEvent(event)
+
+				return results
 			})
 		}
 	}
@@ -982,489 +976,6 @@ class DiceBox {
 		this.last_time = 0;
 		this.animateThrow(this.running, callback, notationVectors);
 
-	}
-
-	getDiceTotals(notationVectors, array_dicemeshes) {
-
-		let valueSets = [];
-		let labelSets = [];
-
-		// first calculate all sets into values
-		// '4d20', '8d6', etc
-		// step 1: sort all results into corresponding sets with values and labels
-		for(let i = 0; i < array_dicemeshes.length; i++) {
-			let notation = array_dicemeshes[i].notation;
-			let diceobj =  this.DiceFactory.get(notation.type);
-
-			if (diceobj.display == 'labels') {
-				labelSets.push(array_dicemeshes[i]);
-			}
-			if (diceobj.display == 'values') {
-				if (!valueSets[notation.sid]) valueSets[notation.sid] = [];
-				valueSets[notation.sid].push(array_dicemeshes[i]);
-			}
-		}
-
-		let setValues = [];
-		let lastgroupid = 0;
-
-		// step 2: iterate each set and combine their values
-		for (let i=0, len=valueSets.length; i < len; ++i) {
-			let set = valueSets[i];
-			if(!set) continue;
-			lastgroupid = Math.max(lastgroupid, set[0].notation.gid);
-			setValues.push(this.diceGroupCombine(notationVectors, set));
-		}
-
-		// step 3: insert any trailing constant as another entry
-		if (notationVectors.constant != '') {
-			let constant = parseInt(notationVectors.constant);
-
-			setValues.push({
-				isconstant: true,
-				rolls: ''+constant,
-				labels: '',
-				gid: lastgroupid+1,
-				glvl: 0,
-				values: Math.abs(constant),
-				op: notationVectors.op,
-			});
-		}
-
-		let groupLevels = {};
-
-		// step 4: iterate the combined sets and group first by level, then by groupid
-		for (let i=0, len=setValues.length; i < len; ++i) {
-			let setvalue = setValues[i];
-
-			let level = setvalue.glvl;
-			let groupid = setvalue.gid;
-
-			if (!groupLevels[level]) {
-				groupLevels[level] = {};
-			}
-
-			if (!groupLevels[level][groupid]) {
-				groupLevels[level][groupid] = [];
-			}
-
-			groupLevels[level][groupid].push(setvalue);
-		}
-
-		//let results = {rolls: '', labels: '', values: ''};
-		let results = this.diceGroupCombine(notationVectors, labelSets);
-		results.op = '';
-		results.values = '';
-
-		//step 6: iterate the levels combining all sets in a group at that level
-		// iterate levels first, levels should be in descending order
-		//  so we start at the deepest level first and work upwards
-
-		let groupLevelsKeys = Object.keys(groupLevels).reverse();
-
-		for (let key=0, len=groupLevelsKeys.length; key < len; ++key) {
-
-			let level = groupLevelsKeys[key];
-			let groupsInLevel = groupLevels[level];
-			if (!groupsInLevel) continue;
-
-			let resultsForLevel = {rolls: '', labels: '', values: 0, op: ''};
-
-			// look for groups at this level and combine those
-			for (let groupid in groupsInLevel) {
-
-				let groupResults = groupsInLevel[groupid];
-
-				let resultsForGroup = {rolls: '', labels: '', values: 0, op: ''};
-
-				for (let i=0, len=groupResults.length; i < len; ++i) {
-					let groupResult = groupResults[i];
-
-					let op = (i == 0) ? '' : groupResult.op;
-
-					if (groupResult.rolls.length > 0 && !groupResult.isconstant) resultsForGroup.rolls +=  op+'['+groupResult.rolls+']';
-					if (groupResult.rolls.length > 0 && groupResult.isconstant) resultsForGroup.rolls +=  op+groupResult.rolls;
-					if (groupResult.labels.length > 0) resultsForGroup.labels += '['+groupResult.labels+']';
-					if (resultsForGroup.op == '') resultsForGroup.op = groupResult.op;
-
-					if (groupResult.isconstant) {
-
-						resultsForGroup.op = groupResult.op;
-						resultsForGroup.labels = groupResult.labels;
-						resultsForGroup.values = groupResult.values;
-
-					} else {
-						resultsForGroup.values = this.operate(resultsForGroup.values, groupResult.op, groupResult.values);
-					}
-
-				}
-
-				let op = (groupid == 0) ? '' : resultsForGroup.op;
-
-				if (len == 1) {
-					if (resultsForGroup.rolls.length > 0) resultsForLevel.rolls += op+resultsForGroup.rolls;
-				} else {
-					if (resultsForGroup.rolls.length > 0) resultsForLevel.rolls += op+'('+resultsForGroup.rolls+')';
-				}
-
-				if (resultsForGroup.labels.length > 0) resultsForLevel.labels += resultsForGroup.labels;
-				if (resultsForLevel.op == '') resultsForLevel.op = resultsForGroup.op;
-
-				//if (groupResults.length == 1) {
-				//    resultsForLevel = resultsForGroup;
-				//} else {
-
-					resultsForLevel.values = this.operate(resultsForLevel.values, resultsForGroup.op, resultsForGroup.values);
-				//}
-			}
-
-			if (resultsForLevel.rolls.length > 0) results.rolls += resultsForLevel.rolls+'';
-			if (resultsForLevel.labels.length > 0) results.labels += resultsForLevel.labels;
-
-			if (results.op == '') results.op = resultsForLevel.op;
-			if (results.values == '' && resultsForLevel.values != '') results.values = parseInt(results.values) || 0;
-
-			//if (results.length == 1) {
-			//    resultsForLevel.values = resultsForGroup.values;
-			//    resultsForLevel.op = resultsForGroup.op;
-			//} else {
-
-				results.values = this.operate(results.values, resultsForLevel.op, resultsForLevel.values);
-			//}
-		}
-		return results;
-	}
-
-	// returns object: {rolls: String, labels: String, values: Int, op: String, gid: Int, glvl: Int}
-	diceGroupCombine(notationVectors, dicemeshList) {
-
-		// known systems with preset rules
-		let swrpgdice = [];
-		let swarmadadice = [];
-		let xwingdice = [];
-		let legiondice = [];
-
-		// generic any dice with display == 'values'
-		let numberdice = [];
-
-		// generic any other dice with display == 'labels'
-		let labeldice = [];
-
-		// all dice in a set/dice group will have the same function and arguments due to sorting beforehand
-		// this means the list passed in is the set of dice that need to be affected by this function
-		let diceFunc = '';
-		let diceFuncArgs = '';
-		if (diceFunc == '' && dicemeshList[0] && dicemeshList[0].notation && dicemeshList[0].notation.func) {
-			diceFunc = dicemeshList[0].notation.func.toLowerCase();
-
-			if (diceFuncArgs == '' && dicemeshList[0] && dicemeshList[0].notation && dicemeshList[0].notation.args) {
-				diceFuncArgs = dicemeshList[0].notation.args;
-			}
-
-			if (diceFunc != '') {
-				// let funcdata = this.DiceFunctions.afterThrowFunctions[diceFunc];
-				let funcdata
-
-				if (funcdata && funcdata.method) {
-					let method = funcdata.method;
-					dicemeshList = funcdata.method(dicemeshList, diceFuncArgs);
-				}
-			}
-
-		}
-		
-		// split up results between known systems, symbol, and number dice
-		for(let i = 0; i < dicemeshList.length; i++){
-
-			let dicemesh = dicemeshList[i];
-			let diceobj =  this.DiceFactory.get(dicemesh.notation.type);
-			let operator = dicemesh.notation.op;
-			let result = dicemesh.getLastValue();
-
-			if (diceobj.system == 'swrpg') {
-				swrpgdice.push(dicemesh);
-			} else if (diceobj.system == 'swarmada') {
-				swarmadadice.push(dicemesh);
-			} else if (diceobj.system == 'xwing') {
-				xwingdice.push(dicemesh);
-			} else if (diceobj.system == 'legion') {
-				legiondice.push(dicemesh);
-			} else if (diceobj.system == 'd20' || diceobj.display == 'values') {
-				numberdice.push(dicemesh);
-			} else if (diceobj.display == 'labels') {
-				labeldice.push(dicemesh);
-			}
-		}
-
-
-		let rolls = '';
-		let labels = '';
-		let values = 0;
-
-		// swrpg dice, custom logic
-		if(swrpgdice.length > 0) {
-
-			let success = 0;
-			let failure = 0;
-			let advantage = 0;
-			let threat = 0;
-			let triumph = 0;
-			let despair = 0;
-			let dark = 0;
-			let light = 0;
-
-			rolls += '<span style="font-family: \'SWRPG-Symbol-Regular\'">';
-
-			for(let i = 0; i < swrpgdice.length; i++){
-
-				let currentlabel = swrpgdice[i].getLastValue().label;
-
-				success += (currentlabel.split('s').length - 1);
-				failure += (currentlabel.split('f').length - 1);
-				advantage += (currentlabel.split('a').length - 1);
-				threat += (currentlabel.split('t').length - 1);
-				triumph += (currentlabel.split('x').length - 1);
-				despair += (currentlabel.split('y').length - 1);
-				dark += (currentlabel.split('z').length - 1);
-				light += (currentlabel.split('Z').length - 1);
-			}
-
-			success += triumph;
-			failure += despair;
-
-			rolls += 's'.repeat(success);
-			rolls += 'f'.repeat(failure);
-			rolls += 'a'.repeat(advantage);
-			rolls += 't'.repeat(threat);
-			rolls += 'x'.repeat(triumph);
-			rolls += 'y'.repeat(despair);
-			rolls += 'z'.repeat(dark);
-			rolls += 'Z'.repeat(light);
-
-			rolls = rolls.trim();
-
-			rolls += '</span>';
-
-			labels += '<span style="font-family: \'SWRPG-Symbol-Regular\'">';
-
-			if (success > failure) labels += 's'.repeat(success-failure);
-			if (failure > success) labels += 'f'.repeat(failure-success);
-			if (advantage > threat) labels += 'a'.repeat(advantage-threat);
-			if (threat > advantage) labels += 't'.repeat(threat-advantage);
-			if (triumph > 0) labels += 'x'.repeat(triumph);
-			if (despair > 0) labels += 'y'.repeat(despair);
-			if (dark > 0) labels += 'z'.repeat(dark);
-			if (light > 0) labels += 'Z'.repeat(light);
-
-			labels = labels.trim() + '</span>';
-
-		}
-
-		// swarmada dice, custom logic
-		if(swarmadadice.length > 0) {
-
-			let hit = 0;
-			let critical = 0;
-			let accuracy = 0;
-
-			rolls += '<span style="font-family: \'Armada-Symbol-Regular\'">';
-
-			for(let i = 0; i < swarmadadice.length; i++){
-
-				let currentlabel = swarmadadice[i].getLastValue().label;
-
-				hit += (currentlabel.split('F').length - 1);
-				critical += (currentlabel.split('E').length - 1);
-				accuracy += (currentlabel.split('G').length - 1);
-			}
-
-			rolls += 'F'.repeat(hit);
-			rolls += 'E'.repeat(critical);
-			rolls += 'G'.repeat(accuracy);
-
-			rolls = rolls.trim();
-
-			rolls += '</span>';
-
-			labels += '<span style="font-family: \'Armada-Symbol-Regular\'">';
-			
-			if (hit > 0) labels += 'F'.repeat(hit);
-			if (critical > 0) labels += 'E'.repeat(critical);
-			if (accuracy > 0) labels += 'G'.repeat(accuracy);
-
-			labels = labels.trim() + '</span>';
-
-		}
-
-		// xwing dice, custom logic
-		if(xwingdice.length > 0) {
-
-			let hit = 0;
-			let critical = 0;
-			let focus = 0;
-			let evade = 0;
-
-			rolls += '<span style="font-family: \'XWing-Symbol-Regular\'">';
-
-			for(let i = 0; i < xwingdice.length; i++){
-
-				let currentlabel = xwingdice[i].getLastValue().label;
-
-				hit += (currentlabel.split('d').length - 1);
-				critical += (currentlabel.split('c').length - 1);
-				focus += (currentlabel.split('f').length - 1);
-				evade += (currentlabel.split('e').length - 1);
-			}
-
-			rolls += 'd'.repeat(hit);
-			rolls += 'c'.repeat(critical);
-			rolls += 'f'.repeat(focus);
-			rolls += 'e'.repeat(evade);
-
-			rolls = rolls.trim();
-
-			rolls += '</span>';
-
-			labels += '<span style="font-family: \'XWing-Symbol-Regular\'">';
-
-			if (hit == evade) {
-				hit = 0;
-				evade = 0;
-			} else if (hit > evade)  {
-				hit -= evade;
-				evade = 0;
-			} else if (evade > hit) {
-				evade -= hit;
-				hit = 0;
-			}
-
-			if (critical == evade) {
-				evade = 0;
-				critical = 0;
-			} else if (critical > evade) {
-				critical -= evade;
-				evade = 0;
-			} else if (evade > critical) {
-				evade -= critical;
-				critical = 0;
-			}
-			
-			if (hit > 0) labels += 'd'.repeat(Math.max(hit,0));
-			if (critical > 0) labels += 'c'.repeat(Math.max(critical,0));
-			if (focus > 0) labels += 'f'.repeat(Math.max(focus,0));
-			if (evade > 0) labels += 'e'.repeat(Math.max(evade,0));
-
-			labels = labels.trim() + '</span>';
-
-		}
-
-		// legion dice, custom logic
-		if(legiondice.length > 0) {
-
-			let atk_hit = 0;
-			let atk_crit = 0;
-			let atk_surge = 0;
-			let def_block = 0;
-			let def_surge = 0;
-
-			rolls += '<span style="font-family: \'Legion-Symbol-Regular\'">';
-
-			for(let i = 0; i < legiondice.length; i++){
-
-				let currentlabel = legiondice[i].getLastValue().label;
-
-				atk_hit += (currentlabel.split('h').length - 1);
-				atk_crit += (currentlabel.split('c').length - 1);
-				atk_surge += (currentlabel.split('o').length - 1);
-
-				def_block += (currentlabel.split('s').length - 1);
-				def_surge += (currentlabel.split('d').length - 1);
-			}
-
-			rolls += 'h'.repeat(atk_hit);
-			rolls += 'c'.repeat(atk_crit);
-			rolls += 'o'.repeat(atk_surge);
-			rolls += 's'.repeat(def_block);
-			rolls += 'd'.repeat(def_surge);
-
-			rolls = rolls.trim();
-
-			rolls += '</span>';
-
-			labels += '<span style="font-family: \'Legion-Symbol-Regular\'">';
-			
-			if (atk_hit > 0) labels += 'h'.repeat(Math.max(atk_hit,0));
-			if (atk_crit > 0) labels += 'c'.repeat(Math.max(atk_crit,0));
-			if (atk_surge > 0) labels += 'o'.repeat(Math.max(atk_surge,0));
-			if (def_block > 0) labels += 's'.repeat(Math.max(def_block,0));
-			if (def_surge > 0) labels += 'd'.repeat(Math.max(def_surge,0));
-
-			labels = labels.trim() + '</span>';
-
-		}
-
-		// labels only
-		if (labeldice.length > 0) {
-
-			let rolltext = [];
-			let resulttext = [];
-
-			for (let i = 0; i < labeldice.length; i++) {
-				let lastValue = labeldice[i].getLastValue();
-
-				let ignoredclass = lastValue.ignore ? ' ignored' : '';
-
-				rolltext.push('<span class="diceresult'+ignoredclass+'" data-uuid="'+labeldice[i].uuid+'">'+lastValue.label+'</span>');
-
-				if (lastValue.ignore) continue;
-
-				resulttext.push(lastValue.label);
-			}
-
-			rolls += rolltext.join('');
-			labels += resulttext.join('');
-		}
-
-		// numbers only
-		if (numberdice.length > 0) {
-
-			let rolltext = [];
-
-			for (let i = 0; i < numberdice.length; i++) {
-				let lastValue = numberdice[i].getLastValue();
-
-				let ignoredclass = lastValue.ignore ? ' ignored' : '';
-
-				rolltext.push('<span class="diceresult'+ignoredclass+'" data-uuid="'+numberdice[i].uuid+'">'+lastValue.value+'</span>');
-
-				if (lastValue.ignore) continue;
-
-				values = this.operate(values, numberdice[i].notation.op, lastValue.value);
-			}
-
-			rolls += rolltext.join('+');
-		}
-
-
-		// grab the operator, groupid and grouplevel from the first item
-		let op = dicemeshList[0] ? dicemeshList[0].notation.op || '+' : '+';
-		let gid = dicemeshList[0] ? dicemeshList[0].notation.gid || 0 : 0;
-		let glvl = dicemeshList[0] ? dicemeshList[0].notation.glvl || 0 : 0;
-
-		return {rolls: rolls, labels: labels, values: values, op: op, gid: gid, glvl: glvl};
-		
-	}
-
-	operate(valuea, operator, valueb) {
-		switch (operator) {
-			case '^': valuea = Math.pow(valuea, valueb); break;
-			case '%': valuea = valuea % valueb; break;
-			case '*': valuea *= valueb; break;
-			case '/': valuea /= valueb; break;
-			case '-': valuea -= valueb; break;
-			case '+': default: valuea += valueb; break;
-		}
-		return valuea;
 	}
 }
 
