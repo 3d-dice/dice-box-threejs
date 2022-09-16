@@ -907,22 +907,24 @@ class DiceBox {
 		setTimeout(() => { this.renderer.render(this.scene, this.camera); }, 100);
 	}
 
-	roll(notationSting){
+	async roll(notationSting){
 		const toss = this.startClickThrow(notationSting)
 		if(toss){
 			const DL = this.diceList
-			this.rollDice(toss,(results) => {
-			  // console.log("🚀 ~ this.rollDice ~ results", results)
-
-				// setting up a couple of ways to consume the final results
-				// call onRollComplete 
-				this.onRollComplete(results)
-
-				// dispatch an event with the results object for other UI elements to listen for
-				const event = new CustomEvent('rollComplete', {detail: results})
-				document.dispatchEvent(event)
-
-				return results
+			return new Promise((resolve,reject) => {
+				this.rollDice(toss,(results) => {
+					// console.log("🚀 ~ this.rollDice ~ results", results)
+	
+					// setting up a couple of ways to consume the final results
+					// call onRollComplete 
+					this.onRollComplete(results)
+	
+					// dispatch an event with the results object for other UI elements to listen for
+					const event = new CustomEvent('rollComplete', {detail: results})
+					document.dispatchEvent(event)
+	
+					resolve(results)
+				})
 			})
 		}
 	}
