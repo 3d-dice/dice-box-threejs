@@ -18,8 +18,8 @@ const defaultConfig = {
 	theme_surface:  "green-felt",
 	sound_dieMaterial: 'plastic',
 	theme_customColorset: null,
-	theme_colorset: "ice",
-	theme_texture: "ice",
+	theme_colorset: "white",
+	theme_texture: "",
 	theme_material: "glass",
 	gravity_multiplier: 400,
 	light_intensity: 0.7,
@@ -55,15 +55,12 @@ class DiceBox {
 			far: null
 		};
 
-		this.DiceColors = new DiceColors()
 		this.scene = new THREE.Scene();
 		this.world = new CANNON.World();
 		this.raycaster = new THREE.Raycaster();
 		this.rayvisual = null;
 		this.showdebugtracer = false;
 		this.dice_body_material = new CANNON.Material();
-		this.desk_body_material = new CANNON.Material();
-		this.barrier_body_material = new CANNON.Material();
 		this.sounds_table = {};
 		this.sounds_dice = [];
 		this.lastSoundType = '';
@@ -77,12 +74,11 @@ class DiceBox {
 		this.light_amb;
 		this.desk;
 		this.box_body = {};
-		this.pane;
-		this.bodies = []
-		this.meshes = []
+		this.bodies = [];
+		this.meshes = [];
+		this.diceList = [];
 
 		//public variables
-		this.diceList = []; //'private' variable
 		// this.framerate = (1/60);
 		// this.sounds = false;
 		// this.volume = 100;
@@ -107,16 +103,17 @@ class DiceBox {
 
 		// this.shadows = true
 
+		// merge this with default config and any options coming in
 		Object.assign(this, defaultConfig, options)
 
+		this.DiceColors = new DiceColors();
 		this.DiceFactory = new DiceFactory({
 			baseScale: this.baseScale
 		});
 		this.DiceFactory.setBumpMapping(true);
 
-
+		// post config settings
 		this.surface = THEMES[this.theme_surface].surface
-
 
 	}
 
@@ -155,11 +152,10 @@ class DiceBox {
 
 		// this.scene.add(new THREE.HemisphereLight( 0xffffbb, 0x676771, 1 ));
 
-		this.world.addContactMaterial(new CANNON.ContactMaterial( this.desk_body_material, this.dice_body_material, {mass:0,friction: 0.6, restitution: 0.5}));
-		this.world.addContactMaterial(new CANNON.ContactMaterial( this.barrier_body_material, this.dice_body_material, {mass:0, friction: 0.6, restitution: 1.0}));
-		this.world.addContactMaterial(new CANNON.ContactMaterial( this.dice_body_material, this.dice_body_material, {mass:0,friction: 0.6, restitution: 0.5}));
 		this.makeWorldBox()
+
 		this.resizeWorld()
+
 		if (this.showdebugtracer) {
 			//raycaster.setFromCamera( this.mouse.pos, this.camera );
 			this.rayvisual = new THREE.ArrowHelper(this.raycaster.ray.direction, this.camera.position, 1000, 0xff0000);
@@ -190,25 +186,32 @@ class DiceBox {
 			this.world.removeBody(this.box_body.rightWall)
 		}
 
-		this.box_body.desk = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: this.desk_body_material})
+		const desk_body_material = new CANNON.Material();
+		const barrier_body_material = new CANNON.Material();
+
+		this.world.addContactMaterial(new CANNON.ContactMaterial( desk_body_material, this.dice_body_material, {mass:0,friction: 0.6, restitution: 0.5}));
+		this.world.addContactMaterial(new CANNON.ContactMaterial( barrier_body_material, this.dice_body_material, {mass:0, friction: 0.6, restitution: 1.0}));
+		this.world.addContactMaterial(new CANNON.ContactMaterial( this.dice_body_material, this.dice_body_material, {mass:0,friction: 0.6, restitution: 0.5}));
+
+		this.box_body.desk = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: desk_body_material})
 		this.world.addBody(this.box_body.desk);
 		
-		this.box_body.topWall = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: this.barrier_body_material});
+		this.box_body.topWall = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: barrier_body_material});
 		this.box_body.topWall.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), Math.PI / 2);
 		this.box_body.topWall.position.set(0, this.display.containerHeight * 0.93, 0);
 		this.world.addBody(this.box_body.topWall);
 
-		this.box_body.bottomWall = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: this.barrier_body_material});
+		this.box_body.bottomWall = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: barrier_body_material});
 		this.box_body.bottomWall.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
 		this.box_body.bottomWall.position.set(0, -this.display.containerHeight * 0.93, 0);
 		this.world.addBody(this.box_body.bottomWall);
 
-		this.box_body.leftWall = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: this.barrier_body_material});
+		this.box_body.leftWall = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: barrier_body_material});
 		this.box_body.leftWall.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), -Math.PI / 2);
 		this.box_body.leftWall.position.set(this.display.containerWidth * 0.93, 0, 0);
 		this.world.addBody(this.box_body.leftWall);
 
-		this.box_body.rightWall = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: this.barrier_body_material});
+		this.box_body.rightWall = new CANNON.Body({allowSleep: false, mass: 0, shape: new CANNON.Plane(), material: barrier_body_material});
 		this.box_body.rightWall.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI / 2);
 		this.box_body.rightWall.position.set(-this.display.containerWidth * 0.93, 0, 0);
 		this.world.addBody(this.box_body.rightWall);
@@ -795,6 +798,7 @@ class DiceBox {
 				}
 			}
 		}
+		// console.log("Throw finished!");
 		return true;
 	}
 
@@ -911,7 +915,6 @@ class DiceBox {
 			this.scene.remove(dice); 
 			if (dice.body) this.world.removeBody(dice.body);
 		}
-		if (this.pane) this.scene.remove(this.pane);
 		this.renderer.render(this.scene, this.camera);
 
 		setTimeout(() => { this.renderer.render(this.scene, this.camera); }, 100);
@@ -921,8 +924,11 @@ class DiceBox {
 		const toss = this.startClickThrow(notationSting)
 		if(toss){
 			const DL = this.diceList
-			this.rollDice(toss,(results)=>{
+			this.rollDice(toss,(results) => {
+			  // console.log("🚀 ~ this.rollDice ~ results", results)
 				const totals = this.getDiceTotals(results.vectors, DL)
+					// console.log("🚀 ~ this.rollDice ~ totals", totals)
+					return totals
 			})
 		}
 	}
