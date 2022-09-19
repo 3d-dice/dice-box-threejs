@@ -132,7 +132,6 @@ class DiceBox {
 	async initialize() {
 
 		// this.cannonDebugger = new CannonDebugger(this.scene,this.world)
-
 		this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
 		this.container.appendChild(this.renderer.domElement);
 		this.renderer.shadowMap.enabled = this.shadows;
@@ -149,7 +148,7 @@ class DiceBox {
 		// this.scene.add(new THREE.HemisphereLight( 0xffffbb, 0x676771, 1 ));
 
 		this.makeWorldBox()
-
+		
 		this.resizeWorld()
 
 		await this.loadTheme({
@@ -157,13 +156,16 @@ class DiceBox {
 			texture: this.theme_texture,
 			material: this.theme_material
 		})
+		.catch(e=>{throw new Error("Unable to load theme")})
 
-		await this.loadSounds()
+		if(this.sounds){
+			await this.loadSounds()
+			.catch(e=>{throw new Error("Unable to load sounds")})
+		}
 
 		// this.DiceFactory.setCubeMap(`./themes/${this.theme_surface}/`,THEMES[this.theme_surface].cubeMap)
 
-		// this.renderer.render(this.scene, this.camera);
-
+		this.renderer.render(this.scene, this.camera);
 	}
 
 	makeWorldBox(){
@@ -237,32 +239,29 @@ class DiceBox {
 
 		this.sound_dieMaterial = hassound_dieMaterial ? this.colorData.texture.material : "plastic"
 		
-
-		if(this.sounds){
-			if(!this.sounds_table.hasOwnProperty(this.surface)){
-				this.sounds_table[this.surface] = [];
-				let numsounds = surfaces[this.surface]
-				for (let s=1; s <= numsounds; ++s) {
-					const clip = await this.loadAudio('./sounds/surfaces/surface_'+this.surface+s+'.mp3')
-					this.sounds_table[this.surface].push(clip);
-				}
+		if(!this.sounds_table.hasOwnProperty(this.surface)){
+			this.sounds_table[this.surface] = [];
+			let numsounds = surfaces[this.surface]
+			for (let s=1; s <= numsounds; ++s) {
+				const clip = await this.loadAudio('./sounds/surfaces/surface_'+this.surface+s+'.mp3')
+				this.sounds_table[this.surface].push(clip);
 			}
-			// load the coin sounds for all sets
-			if(!this.sounds_dice.hasOwnProperty('coin')){
-				this.sounds_dice['coin'] = []
-				let numsounds = dieMaterials['coin']
-				for (let s=1; s <= numsounds; ++s) {
-					const clip = await this.loadAudio('./sounds/dicehit/dicehit_coin'+s+'.mp3')
-					this.sounds_dice['coin'].push(clip);
-				}
+		}
+		// load the coin sounds for all sets
+		if(!this.sounds_dice.hasOwnProperty('coin')){
+			this.sounds_dice['coin'] = []
+			let numsounds = dieMaterials['coin']
+			for (let s=1; s <= numsounds; ++s) {
+				const clip = await this.loadAudio('./sounds/dicehit/dicehit_coin'+s+'.mp3')
+				this.sounds_dice['coin'].push(clip);
 			}
-			if(!this.sounds_dice.hasOwnProperty(this.sound_dieMaterial)){
-				this.sounds_dice[this.sound_dieMaterial] = []
-				let numsounds = dieMaterials[this.sound_dieMaterial]
-				for (let s=1; s <= numsounds; ++s) {
-					const clip = await this.loadAudio('./sounds/dicehit/dicehit_'+this.sound_dieMaterial+s+'.mp3')
-					this.sounds_dice[this.sound_dieMaterial].push(clip);
-				}
+		}
+		if(!this.sounds_dice.hasOwnProperty(this.sound_dieMaterial)){
+			this.sounds_dice[this.sound_dieMaterial] = []
+			let numsounds = dieMaterials[this.sound_dieMaterial]
+			for (let s=1; s <= numsounds; ++s) {
+				const clip = await this.loadAudio('./sounds/dicehit/dicehit_'+this.sound_dieMaterial+s+'.mp3')
+				this.sounds_dice[this.sound_dieMaterial].push(clip);
 			}
 		}
 	}
@@ -273,6 +272,9 @@ class DiceBox {
 			audio.oncanplaythrough = () => resolve(audio)
 			audio.crossOrigin = "anonymous";
 			audio.src = src
+			audio.onerror = (error) => reject(error)
+		}).catch(e => {
+			console.error("Unable to load audio")
 		})
 	}
 
@@ -672,9 +674,10 @@ class DiceBox {
 			else {
 				sound = this.sounds_dice[this.sound_dieMaterial][Math.floor(Math.random() * this.sounds_dice[this.sound_dieMaterial].length)];
 			}
-
-			sound.volume = Math.min(speed / 8000, this.volume/100)
-			sound.play().catch(error => {});
+			if(sound){
+				sound.volume = Math.min(speed / 8000, this.volume/100)
+				sound.play().catch(error => {});
+			}
 			// if (isPlaying !== undefined) {
 			// 	isPlaying.then(() => {
 			// 		// Autoplay started!
@@ -695,8 +698,10 @@ class DiceBox {
 
 			let soundlist = this.sounds_table[surface];
 			let sound = soundlist[Math.floor(Math.random() * soundlist.length)];
-			sound.volume = Math.min(speed / 8000, this.volume/100)
-			sound.play().catch(error => {});
+			if(sound){
+				sound.volume = Math.min(speed / 8000, this.volume/100)
+				sound.play().catch(error => {});
+			}
 			// if (isPlaying !== undefined) {
 			// 	isPlaying.then(() => {
 			// 		// Autoplay started!

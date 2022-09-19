@@ -33,7 +33,11 @@ export class DiceColors {
 			img.onload = () => resolve(img)
 			img.crossOrigin = "anonymous";
 			img.src = src
-		})
+			img.onerror = (error) => reject(error)
+			}).catch(e => {
+				console.error("Unable to load image texture")
+				// throw new Error("Unable to load image")
+			})
 	}
 
 	// randomColor() {

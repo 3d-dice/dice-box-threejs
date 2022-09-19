@@ -310,7 +310,7 @@ class DiceFactory {
 		contextBump.fillRect(0, 0, canvasBump.width, canvasBump.height);
 
 		//create underlying texture
-		if (texture.name != '' && texture.name != 'none') {
+		if (texture.texture && texture.name != '' && texture.name != 'none') {
 			context.globalCompositeOperation = texture.composite || 'source-over';
 			context.drawImage(texture.texture, 0, 0, canvas.width, canvas.height);
 			context.globalCompositeOperation = 'source-over';
@@ -676,7 +676,7 @@ class DiceFactory {
 			cf[i] = faces[i].slice(0, faces[i].length - 1);
 		}
 		const shape = new CANNON.ConvexPolyhedron({vertices:cv,faces:cf});
-		console.log("🚀 ~ create_shape ~ shape", shape)
+		// console.log("🚀 ~ create_shape ~ shape", shape)
 		return shape
 	}
 
