@@ -32,6 +32,7 @@ class DiceBox {
 
 	constructor(element_container, options = {}) {
 		//private variables
+		this.initialized = false
 		this.container = document.querySelector(element_container);
 		this.dimensions = new THREE.Vector2(this.container.clientWidth, this.container.clientHeight)
 		this.adaptive_timestep = false;
@@ -164,6 +165,8 @@ class DiceBox {
 		}
 
 		// this.DiceFactory.setCubeMap(`./themes/${this.theme_surface}/`,THEMES[this.theme_surface].cubeMap)
+
+		this.initialized = true
 
 		this.renderer.render(this.scene, this.camera);
 	}
