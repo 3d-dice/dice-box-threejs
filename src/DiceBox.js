@@ -886,7 +886,11 @@ class DiceBox {
 	}
 
 	startClickThrow(notation) {
-		if (this.rolling) return;
+		// if (this.rolling) return;
+		if(this.rolling) {
+			this.clearDice();
+			this.rolling = false
+		}
 
 		let vector = { x: (Math.random() * 2 - 0.5) * this.display.currentWidth, y: -(Math.random() * 2 - 0.5) * this.display.currentHeight };
 		let dist = Math.sqrt(vector.x * vector.x + vector.y * vector.y) + 100;
