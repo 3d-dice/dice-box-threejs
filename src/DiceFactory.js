@@ -1,16 +1,18 @@
 "use strict";
-import {DicePreset} from './DicePreset.js';
+import {DicePreset} from './DicePreset.js'
 import {MATERIALTYPES} from "./const/materialtypes"
+import {DICE_GEOM} from "./const/dice"
+
 import * as THREE from "three"
 import * as CANNON from "cannon-es"
 
 const defaultConfig = {
-	baseScale: 200,
+	baseScale: 100,
 	bumpMapping: true
 }
 
 class DiceFactory {
-	static dice = []
+	static dice = {}
 	constructor(options) {
 		// this.dice = {};
 		this.geometries = {};
@@ -33,9 +35,14 @@ class DiceFactory {
 			flatShading: true
 		};
 
-		this.cubeMap;
-
 		Object.assign(this, defaultConfig, options)
+	}
+
+	updateConfig(options = {}){
+		Object.assign(this,options)
+		if(options.scale){
+			this.scaleGeometry()
+		}
 	}
 
 	setBumpMapping(bumpMapping){
@@ -43,19 +50,8 @@ class DiceFactory {
 		this.materials_cache = {};
 	}
 
-	setCubeMap(basepath, sources) {
-		if (basepath === false) {
-			this.cubeMap = null;
-			return;
-		}
-
-		let loader = new THREE.CubeTextureLoader();
-		loader.setPath(basepath);
-		this.cubeMap = loader.load(sources);
-	}
-
 	// returns a dicemesh (THREE.Mesh) object
-	create(type, colorset) {
+	create(type) {
 		let diceobj = this.get(type);
 		if (!diceobj) return null;
 
@@ -73,6 +69,7 @@ class DiceFactory {
 		dicemesh.shape = diceobj.shape;
 		dicemesh.rerolls = 0;
 		dicemesh.resultReason = 'natural';
+		dicemesh.mass = diceobj.mass
 
 		dicemesh.getFaceValue = function() {
 			// callback function. scope of this = Mesh
@@ -172,6 +169,20 @@ class DiceFactory {
 		return this.geometries[type];
 	}
 
+	scaleGeometry(){
+		// console.log('this.geometries :>> ', this.geometries);
+		// Object.entries(this.geometries).forEach(([key,geom]) => {
+		// 	geom.scale(this.scale,this.scale,this.scale)
+		// 	// remove cannon shape
+		// 	// geom.cannon_shape.body.removeShape(geom.cannon_shape.body.shapes[0])
+		// 	// recreate cannon shape with new scale
+		// 	const newShape = this.createGeometry(key, this.scale, true)
+		// 	console.log("🚀 ~ Object.entries ~ newShape", newShape)
+		// 	geom.cannon_shape= newShape
+
+		// })
+	}
+
 	createMaterials(diceobj, size, margin, allowcache = true, d4specialindex = 0) {
 
 		let materials = [];
@@ -186,11 +197,7 @@ class DiceFactory {
 			var mat;
 			if (this.dice_material != 'none') {
 				mat = new THREE.MeshStandardMaterial(MATERIALTYPES[this.dice_material]);
-				if (this.cubeMap) {
-					mat.envMap = this.cubeMap;
-				} else {
-					mat.envMapIntensity = 0;
-				}
+				mat.envMapIntensity = 0;
 			} else {
 				mat = new THREE.MeshPhongMaterial(this.material_options);
 			}
@@ -282,15 +289,14 @@ class DiceFactory {
 		let canvasBump = document.createElement("canvas");
 		let contextBump = canvasBump.getContext("2d", {alpha: true});
 		contextBump.globalAlpha = 0;
-
 		contextBump.clearRect(0, 0, canvasBump.width, canvasBump.height);
 
 		let ts;
 
 		if (diceobj.shape == 'd4') {
-			ts = this.calc_texture_size(size + margin) * 2;
+			ts = this.calc_texture_size(size + margin) * 4;
 		} else {
-			ts = this.calc_texture_size(size + size * 2 * margin) * 2;
+			ts = this.calc_texture_size(size + size * 2 * margin) * 4;
 		}
 
 		canvas.width = canvas.height = ts;
@@ -617,101 +623,29 @@ class DiceFactory {
 		return Math.pow(2, Math.floor(Math.log(approx) / Math.log(2)));
 	}
 
-	createGeometry(type, radius) {
+	createGeometry(type, radius, onlyShape = false) {
+		const func = onlyShape ? "create_shape" : "create_geom"
 		switch (type) {
 			case 'd2':
-				return this.create_d2_geometry(radius);
+				var geom = new THREE.CylinderGeometry(1*radius, 1*radius, 0.1*radius, 32);
+				geom.cannon_shape = new CANNON.Cylinder(1*radius, 1*radius, 0.1*radius, 8);
+				return geom;
 			case 'd4':
-				return this.create_d4_geometry(radius);
+				return this[func](DICE_GEOM.d4.vertices, DICE_GEOM.d4.faces, radius, -0.1, Math.PI * 7 / 6, 0.96);
 			case 'd6':
-				return this.create_d6_geometry(radius);
+				return this[func](DICE_GEOM.d6.vertices, DICE_GEOM.d6.faces, radius, 0.1, Math.PI / 4, 0.96);
 			case 'd8':
-				return this.create_d8_geometry(radius);
+				return this[func](DICE_GEOM.d8.vertices, DICE_GEOM.d8.faces, radius, 0, -Math.PI / 4 / 2, 0.965);
 			case 'd10':
-				return this.create_d10_geometry(radius);
+				return this[func](DICE_GEOM.d10.vertices, DICE_GEOM.d10.faces, radius, 0.3, Math.PI, 0.945);
 			case 'd12':
-				return this.create_d12_geometry(radius);
+				return this[func](DICE_GEOM.d12.vertices, DICE_GEOM.d12.faces, radius, 0.2, -Math.PI / 4 / 2, 0.968);
 			case 'd20':
-				return this.create_d20_geometry(radius);
+				return this[func](DICE_GEOM.d20.vertices, DICE_GEOM.d20.faces, radius, -0.2, -Math.PI / 4 / 2, 0.955);
 			default:
+				console.error(`Geometry for ${type} is not available`)
 				return null;
 		}
-	}
-
-	create_d2_geometry(radius) {
-		var geom = new THREE.CylinderGeometry(1*radius, 1*radius, 0.1*radius, 32);
-		// geom.rotateX(Math.PI/2);
-		geom.cannon_shape = new CANNON.Cylinder(1*radius,1*radius,0.1*radius,8);
-		return geom;
-	}
-
-	create_d4_geometry(radius) {
-		var vertices = [[1, 1, 1], [-1, -1, 1], [-1, 1, -1], [1, -1, -1]];
-		var faces = [[1, 0, 2, 1], [0, 1, 3, 2], [0, 3, 2, 3], [1, 2, 3, 4]];
-		return this.create_geom(vertices, faces, radius, -0.1, Math.PI * 7 / 6, 0.96);
-	}
-
-	create_d6_geometry(radius) {
-		var vertices = [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
-				[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]];
-		var faces = [[0, 3, 2, 1, 1], [1, 2, 6, 5, 2], [0, 1, 5, 4, 3],
-				[3, 7, 6, 2, 4], [0, 4, 7, 3, 5], [4, 5, 6, 7, 6]];
-		return this.create_geom(vertices, faces, radius, 0.1, Math.PI / 4, 0.96);
-	}
-
-	create_d8_geometry(radius) {
-		var vertices = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-		var faces = [[0, 2, 4, 1], [0, 4, 3, 2], [0, 3, 5, 3], [0, 5, 2, 4], [1, 3, 4, 5],
-				[1, 4, 2, 6], [1, 2, 5, 7], [1, 5, 3, 8]];
-		return this.create_geom(vertices, faces, radius, 0, -Math.PI / 4 / 2, 0.965);
-	}
-
-	create_d10_geometry(radius) {
-		var a = Math.PI * 2 / 10, h = 0.105, v = -1;
-		var vertices = [];
-		for (var i = 0, b = 0; i < 10; ++i, b += a) {
-			vertices.push([Math.cos(b), Math.sin(b), h * (i % 2 ? 1 : -1)]);
-		}
-		vertices.push([0, 0, -1]);
-		vertices.push([0, 0, 1]);
-		
-		var faces = [
-            [5, 6, 7, 11, 0],
-            [4, 3, 2, 10, 1],
-            [1, 2, 3, 11, 2],
-            [0, 9, 8, 10, 3],
-            [7, 8, 9, 11, 4],
-            [8, 7, 6, 10, 5],
-            [9, 0, 1, 11, 6],
-            [2, 1, 0, 10, 7],
-            [3, 4, 5, 11, 8],
-            [6, 5, 4, 10, 9]
-        ];
-        return this.create_geom(vertices, faces, radius, 0.3, Math.PI, 0.945);
-	}
-
-	create_d12_geometry(radius) {
-		var p = (1 + Math.sqrt(5)) / 2, q = 1 / p;
-		var vertices = [[0, q, p], [0, q, -p], [0, -q, p], [0, -q, -p], [p, 0, q],
-				[p, 0, -q], [-p, 0, q], [-p, 0, -q], [q, p, 0], [q, -p, 0], [-q, p, 0],
-				[-q, -p, 0], [1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1], [-1, 1, 1],
-				[-1, 1, -1], [-1, -1, 1], [-1, -1, -1]];
-		var faces = [[2, 14, 4, 12, 0, 1], [15, 9, 11, 19, 3, 2], [16, 10, 17, 7, 6, 3], [6, 7, 19, 11, 18, 4],
-				[6, 18, 2, 0, 16, 5], [18, 11, 9, 14, 2, 6], [1, 17, 10, 8, 13, 7], [1, 13, 5, 15, 3, 8],
-				[13, 8, 12, 4, 5, 9], [5, 4, 14, 9, 15, 10], [0, 12, 8, 10, 16, 11], [3, 19, 7, 17, 1, 12]];
-		return this.create_geom(vertices, faces, radius, 0.2, -Math.PI / 4 / 2, 0.968);
-	}
-
-	create_d20_geometry(radius) {
-		var t = (1 + Math.sqrt(5)) / 2;
-		var vertices = [[-1, t, 0], [1, t, 0 ], [-1, -t, 0], [1, -t, 0],
-				[0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t],
-				[t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]];
-		var faces = [[0, 11, 5, 1], [0, 5, 1, 2], [0, 1, 7, 3], [0, 7, 10, 4], [0, 10, 11, 5],
-				[1, 5, 9, 6], [5, 11, 4, 7], [11, 10, 2, 8], [10, 7, 6, 9], [7, 1, 8, 10],
-				[3, 9, 4, 11], [3, 4, 2, 12], [3, 2, 6, 13], [3, 6, 8, 14], [3, 8, 9, 15],
-				[4, 9, 5, 16], [2, 4, 11, 17], [6, 2, 10, 18], [8, 6, 7, 19], [9, 8, 1, 20]];
-		return this.create_geom(vertices, faces, radius, -0.2, -Math.PI / 4 / 2, 0.955);
 	}
 
 	fixmaterials(mesh, unique_sides) {
@@ -729,15 +663,20 @@ class DiceFactory {
 	}
 
 	create_shape(vertices, faces, radius) {
-		var cv = new Array(vertices.length), cf = new Array(faces.length);
+		var vectors = new Array(vertices.length);
 		for (var i = 0; i < vertices.length; ++i) {
-			var v = vertices[i];
+			vectors[i] = (new THREE.Vector3).fromArray(vertices[i]).normalize();
+		}
+		var cv = new Array(vertices.length), cf = new Array(faces.length);
+		for (var i = 0; i < vectors.length; ++i) {
+			var v = vectors[i];
 			cv[i] = new CANNON.Vec3(v.x * radius, v.y * radius, v.z * radius);
 		}
 		for (var i = 0; i < faces.length; ++i) {
 			cf[i] = faces[i].slice(0, faces[i].length - 1);
 		}
 		const shape = new CANNON.ConvexPolyhedron({vertices:cv,faces:cf});
+		console.log("🚀 ~ create_shape ~ shape", shape)
 		return shape
 	}
 
@@ -954,7 +893,8 @@ class DiceFactory {
 			var geom = this.make_d10_geom(cg.vectors, cg.faces, radius, tab, af);
 		}
 		//var geom = make_geom(vectors, faces, radius, tab, af); // Without chamfer
-		geom.cannon_shape = this.create_shape(vectors, faces, radius);
+		geom.cannon_shape = this.create_shape(vertices, faces, radius);
+		geom.name = "d"+faces.length
 		return geom;
 	}
 }
