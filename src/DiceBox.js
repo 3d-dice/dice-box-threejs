@@ -10,6 +10,7 @@ import { THEMES } from './const/themes.js';
 import { debounce } from "./helpers"
 
 const defaultConfig = {
+	assetPath: "./",
 	framerate: (1/60),
 	sounds: false,
 	volume: 100,
@@ -105,7 +106,7 @@ class DiceBox {
 		// merge this with default config and any options coming in
 		Object.assign(this, defaultConfig, options)
 
-		this.DiceColors = new DiceColors();
+		this.DiceColors = new DiceColors({assetPath: this.assetPath});
 		this.DiceFactory = new DiceFactory({
 			baseScale: this.baseScale
 		});
@@ -246,7 +247,7 @@ class DiceBox {
 			this.sounds_table[this.surface] = [];
 			let numsounds = surfaces[this.surface]
 			for (let s=1; s <= numsounds; ++s) {
-				const clip = await this.loadAudio('./sounds/surfaces/surface_'+this.surface+s+'.mp3')
+				const clip = await this.loadAudio(this.assetPath + 'sounds/surfaces/surface_'+this.surface+s+'.mp3')
 				this.sounds_table[this.surface].push(clip);
 			}
 		}
@@ -255,7 +256,7 @@ class DiceBox {
 			this.sounds_dice['coin'] = []
 			let numsounds = dieMaterials['coin']
 			for (let s=1; s <= numsounds; ++s) {
-				const clip = await this.loadAudio('./sounds/dicehit/dicehit_coin'+s+'.mp3')
+				const clip = await this.loadAudio(this.assetPath + 'sounds/dicehit/dicehit_coin'+s+'.mp3')
 				this.sounds_dice['coin'].push(clip);
 			}
 		}
@@ -263,7 +264,7 @@ class DiceBox {
 			this.sounds_dice[this.sound_dieMaterial] = []
 			let numsounds = dieMaterials[this.sound_dieMaterial]
 			for (let s=1; s <= numsounds; ++s) {
-				const clip = await this.loadAudio('./sounds/dicehit/dicehit_'+this.sound_dieMaterial+s+'.mp3')
+				const clip = await this.loadAudio(this.assetPath + 'sounds/dicehit/dicehit_'+this.sound_dieMaterial+s+'.mp3')
 				this.sounds_dice[this.sound_dieMaterial].push(clip);
 			}
 		}

@@ -3,8 +3,9 @@ import {COLORSETS} from "./const/colorsets"
 
 export class DiceColors {
 	
-	constructor() {
+	constructor(options = {}) {
 		this.colorsets = []
+		this.assetPath = options.assetPath
 	}
 
 	async ImageLoader(data) {
@@ -32,7 +33,7 @@ export class DiceColors {
 			let img = new Image()
 			img.onload = () => resolve(img)
 			img.crossOrigin = "anonymous";
-			img.src = src
+			img.src = this.assetPath + src
 			img.onerror = (error) => reject(error)
 			}).catch(e => {
 				console.error("Unable to load image texture")
