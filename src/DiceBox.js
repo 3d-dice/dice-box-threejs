@@ -506,6 +506,9 @@ class DiceBox {
 	swapDiceFace(dicemesh, result){
 		const diceobj = this.DiceFactory.get(dicemesh.notation.type);
 
+		// flag this result as forced
+		dicemesh.resultReason = 'forced'
+
 		if (diceobj.shape == 'd4') {
 			this.swapDiceFace_D4(dicemesh, result);
 			return;
@@ -607,10 +610,10 @@ class DiceBox {
 
 			face.materialIndex = matindex + 1;
 		}
-        if (num != 0) {
-            if (num < 0) num += 4;
-            dicemesh.material = this.DiceFactory.createMaterials(diceobj, 0, 0, false, num);
-        }
+		if (num != 0) {
+			if (num < 0) num += 4;
+			dicemesh.material = this.DiceFactory.createMaterials(diceobj, 0, 0, false, num);
+		}
 
 		dicemesh.geometry = geom;
 	}
@@ -776,7 +779,7 @@ class DiceBox {
 
 					//check for forced roll
 					if (dicemesh.result.length == 0) {
-						dicemesh.storeRolledValue('natural');
+						dicemesh.storeRolledValue(dicemesh.resultReason);
 
 						rethrow = this.checkForRethrow(dicemesh);
 
@@ -914,13 +917,47 @@ class DiceBox {
 		setTimeout(() => { this.renderer.render(this.scene, this.camera); }, 100);
 	}
 
+	getDiceResults(notationVectors){
+		let counter = 0
+		const modifier = notationVectors.constant ? parseInt(`${notationVectors.op}${notationVectors.constant}`) : 0
+		const result = {
+			notation: notationVectors.notation,
+			sets: notationVectors.set.map(set => {
+				const endCount = counter + set.num - 1
+				let total = 0
+				const rolls = []
+				for (let index = counter; index <= endCount; index++) {
+					rolls.push({
+						type: set.type,
+						sides: parseInt(set.type.substring(1)),
+						id: counter,
+						...this.diceList[counter].result.at(-1)
+					})
+					total += this.diceList[counter].result.at(-1).value
+					counter++
+				}
+				const returnSet = {
+					num: set.num,
+					type: set.type,
+					sides: parseInt(set.type.substring(1)),
+					rolls,
+					total,
+				}
+				return returnSet
+			}),
+			modifier,
+			total: this.diceList.reduce((total,val) => total + val.result.at(-1).value, modifier)
+		}
+		return result
+	}
+
 	async roll(notationSting){
 		const toss = this.startClickThrow(notationSting)
 		if(toss){
 			const DL = this.diceList
 			return new Promise((resolve,reject) => {
-				this.rollDice(toss,(results) => {
-					// console.log("🚀 ~ this.rollDice ~ results", results)
+				this.rollDice(toss,(notationVectors) => {
+					const results = this.getDiceResults(notationVectors)
 	
 					// setting up a couple of ways to consume the final results
 					// call onRollComplete 
@@ -974,9 +1011,9 @@ class DiceBox {
 		for (let i=0, len=this.diceList.length; i < len; ++i) {
 			if (!this.diceList[i]) continue;
 
-			if (this.diceList[i].resultReason != 'forced') {
+			// if (this.diceList[i].resultReason != 'forced') {
 				this.diceList[i].result = [];
-			}
+			// }
 		}
 
 		// animate the previously simulated roll

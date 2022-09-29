@@ -16,7 +16,7 @@ export class DiceNotation {
 		this.groups = [];
 		this.totalDice = 0;
 		this.op = '';
-		this.constant = '';
+		this.constant = null;
 		this.result = [];
 		this.error = false;
 		this.boost = 1;
