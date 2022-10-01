@@ -26,6 +26,7 @@ const defaultConfig = {
 	light_intensity: 0.7,
 	baseScale: 100,
 	strength: 1,
+	iterationLimit: 1000,
 	onRollComplete: () => {}
 }
 
@@ -77,6 +78,7 @@ class DiceBox {
 		this.bodies = [];
 		this.meshes = [];
 		this.diceList = [];
+		this.notationVectors = null
 
 		//public variables
 		// this.framerate = (1/60);
@@ -408,8 +410,6 @@ class DiceBox {
 		
 		let notationVectors = new DiceNotation(notation);
 
-		// store the last notation
-		this.lastNotation = notationVectors
 
 		for (let i in notationVectors.set) {
 
@@ -500,6 +500,7 @@ class DiceBox {
 				});
 			}            
 		}
+
 		return notationVectors;
 	}
 
@@ -637,6 +638,7 @@ class DiceBox {
 		dicemesh.body.linearDamping = 0.1;
 		dicemesh.body.angularDamping = 0.1;
 		dicemesh.body.diceShape = dicemesh.shape;
+		dicemesh.body.sleepState = 0;
 
 		dicemesh.body.addEventListener('collide', this.eventCollide.bind(this));
 
@@ -727,18 +729,18 @@ class DiceBox {
 	//resets vectors on dice back to startign notation values for a roll after simulation.
 	resetDice(dicemesh, {pos, axis, angle, velocity}) {
 		dicemesh.stopped = 0;
-		this.world.removeBody(dicemesh.body);
-		dicemesh.body = new CANNON.Body({allowSleep: true, sleepSpeedLimit: 75, sleepTimeLimit:0.9, mass: dicemesh.body.mass, shape: dicemesh.geometry.cannon_shape, material: this.dice_body_material});
+		// this.world.removeBody(dicemesh.body);
+		// dicemesh.body = new CANNON.Body({allowSleep: true, sleepSpeedLimit: 75, sleepTimeLimit:0.9, mass: dicemesh.body.mass, shape: dicemesh.geometry.cannon_shape, material: this.dice_body_material});
 		dicemesh.body.type = CANNON.Body.DYNAMIC;
 		dicemesh.body.position.set(pos.x, pos.y, pos.z);
 		dicemesh.body.quaternion.setFromAxisAngle(new CANNON.Vec3(axis.x, axis.y, axis.z), axis.a * Math.PI * 2);
 		dicemesh.body.angularVelocity.set(angle.x, angle.y, angle.z);
 		dicemesh.body.velocity.set(velocity.x, velocity.y, velocity.z);
-		dicemesh.body.linearDamping = 0.1;
-		dicemesh.body.angularDamping = 0.1;
-		dicemesh.body.diceShape = dicemesh.shape;
-		dicemesh.body.addEventListener('collide', this.eventCollide.bind(this));
-		this.world.addBody(dicemesh.body);
+		// dicemesh.body.linearDamping = 0.1;
+		// dicemesh.body.angularDamping = 0.1;
+		// dicemesh.body.diceShape = dicemesh.shape;
+		// dicemesh.body.addEventListener('collide', this.eventCollide.bind(this));
+		// this.world.addBody(dicemesh.body);
 		dicemesh.body.sleepState = 0;
 	}
 
@@ -760,53 +762,50 @@ class DiceBox {
 		return reroll;
 	}
 
-	throwFinished(simulate) {
-		if (this.iteration > 1000) return true;
-		if (this.iteration < (10 / this.framerate)) {
+	throwFinished() {
+		const forcedFinish = this.iteration > this.iterationLimit
 
-			// cycle through diceList and if any dice are still awake then return false
-			// this means with 6d6 die 6 might be asleep but die 1 is awake => return false
-			// cannot get the exact moment an individual die is complete - does this matter?
+		// cycle through diceList and if any dice are still awake then return false
+		for (let i=0, len=this.diceList.length; i < len; ++i) {
+			const dicemesh = this.diceList[i];
+			const sleepState = CANNON.Body.SLEEPING
 
-			for (let i=0, len=this.diceList.length; i < len; ++i) {
-				let dicemesh = this.diceList[i];
+			if (dicemesh.body.sleepState < sleepState && !forcedFinish) {
+				return false;
+			}
+
+			if (dicemesh.body.sleepState == sleepState || forcedFinish) {
+				if(dicemesh.body.type === CANNON.Body.KINEMATIC){
+					continue
+				}
+
 				let rethrow = false;
 
-				if (dicemesh.body.sleepState < CANNON.Body.SLEEPING) {
+				//check for forced roll
+				if (dicemesh.result.length == 0) {
+					dicemesh.storeRolledValue(dicemesh.resultReason);
+					rethrow = this.checkForRethrow(dicemesh);
+				} else if (dicemesh.result.length > 0 && dicemesh.rerolling) {
+					dicemesh.rerolling = false;
+					dicemesh.storeRolledValue('reroll');
+					rethrow = this.checkForRethrow(dicemesh);
+				}
+
+				if (rethrow) {
+					dicemesh.rerolls += 1;
+					dicemesh.rerolling = true;
+					dicemesh.body.wakeUp();
+					dicemesh.body.type = CANNON.Body.DYNAMIC;
+					dicemesh.body.angularVelocity = new CANNON.Vec3(25, 25, 25);
+					dicemesh.body.velocity = new CANNON.Vec3(0, 0, 3000);
 					return false;
 				}
 
-				if (dicemesh.body.sleepState == CANNON.Body.SLEEPING) {
-
-					//check for forced roll
-					if (dicemesh.result.length == 0) {
-						dicemesh.storeRolledValue(dicemesh.resultReason);
-
-						rethrow = this.checkForRethrow(dicemesh);
-
-					} else if (dicemesh.result.length > 0 && dicemesh.rerolling) {
-						dicemesh.rerolling = false;
-						dicemesh.storeRolledValue('reroll');
-						
-						rethrow = this.checkForRethrow(dicemesh);
-					}
-
-					if (rethrow) {
-						dicemesh.rerolls += 1;
-						dicemesh.rerolling = true;
-						dicemesh.body.wakeUp();
-						dicemesh.body.type = CANNON.Body.DYNAMIC;
-						dicemesh.body.angularVelocity = new CANNON.Vec3(25, 25, 25);
-						dicemesh.body.velocity = new CANNON.Vec3(0, 0, 3000);
-						return false;
-					} else {
-						dicemesh.rerolling = false;
-						dicemesh.body.type = CANNON.Body.KINEMATIC;
-					}
-				}
+				dicemesh.rerolling = false;
+				dicemesh.body.type = CANNON.Body.KINEMATIC;
+				
 			}
 		}
-		// console.log("Throw finished!");
 		return true;
 	}
 
@@ -820,9 +819,9 @@ class DiceBox {
 		}
 	}
 
-	animateThrow(threadid, callback, notationVectors){
+	animateThrow(threadid, callback){
 		this.animstate = 'throw';
-		let time = (new Date()).getTime();
+		let time = Date.now();
 		this.last_time = this.last_time || time - (this.framerate*1000);
 		let time_diff = (time - this.last_time) / 1000;
 		++this.iteration;
@@ -853,9 +852,9 @@ class DiceBox {
 		if (this.running == threadid && this.throwFinished()) {
 			this.running = false;
 			this.rolling = false;
-			if(callback) callback.call(this, notationVectors);
+			if(callback) callback.call(this, this.notationVectors);
 			
-			this.running = (new Date()).getTime();
+			this.running = Date.now();
 			this.animateAfterThrow(this.running);
 			return;
 		}
@@ -868,13 +867,13 @@ class DiceBox {
 				} else {
 					requestAnimationFrame(() => { animateCallback.call(this, tid, aftercall, vecs); });
 				}
-			}).bind(this)(this.animateThrow, threadid, this.adaptive_timestep, callback, notationVectors);
+			}).bind(this)(this.animateThrow, threadid, this.adaptive_timestep, callback);
 		}
 	}
 
 	animateAfterThrow(threadid) {
 		this.animstate = 'afterthrow';
-		let time = (new Date()).getTime();
+		let time = Date.now();
 		let time_diff = (time - this.last_time) / 1000;
 		if (time_diff > 3) time_diff = this.framerate;
 
@@ -918,12 +917,20 @@ class DiceBox {
 		setTimeout(() => { this.renderer.render(this.scene, this.camera); }, 100);
 	}
 
-	getDiceResults(notationVectors){
+	getDiceResults(id){
+		if(id !== undefined){
+			return {
+				type: this.diceList[id].shape,
+				sides: parseInt(this.diceList[id].shape.substring(1)),
+				id,
+				...this.diceList[id].result.at(-1)
+			}
+		}
 		let counter = 0
-		const modifier = notationVectors.constant ? parseInt(`${notationVectors.op}${notationVectors.constant}`) : 0
+		const modifier = this.notationVectors.constant ? parseInt(`${this.notationVectors.op}${this.notationVectors.constant}`) : 0
 		const result = {
-			notation: notationVectors.notation,
-			sets: notationVectors.set.map(set => {
+			notation: this.notationVectors.notation,
+			sets: this.notationVectors.set.map(set => {
 				const endCount = counter + set.num - 1
 				let total = 0
 				const rolls = []
@@ -953,12 +960,12 @@ class DiceBox {
 	}
 
 	async roll(notationSting){
-		const toss = this.startClickThrow(notationSting)
-		if(toss){
-			const DL = this.diceList
+		this.notationVectors = this.startClickThrow(notationSting)
+		if(this.notationVectors){
+			// const DL = this.diceList
 			return new Promise((resolve,reject) => {
-				this.rollDice(toss,(notationVectors) => {
-					const results = this.getDiceResults(notationVectors)
+				this.rollDice(() => {
+					const results = this.getDiceResults()
 	
 					// setting up a couple of ways to consume the final results
 					// call onRollComplete 
@@ -974,54 +981,69 @@ class DiceBox {
 		}
 	}
 
-	rollDice(notationVectors, callback){
+	async reroll(diceIdArray) {
+		this.rolling = true;
+		this.running = Date.now();
+		this.iteration = 0
+		return new Promise((resolve,reject) => {
+			diceIdArray.forEach(dieId => {
+				const dicemesh = this.diceList[dieId]
+				dicemesh.rerolls += 1;
+				dicemesh.rerolling = true;
+				dicemesh.body.wakeUp();
+				dicemesh.body.type = CANNON.Body.DYNAMIC;
+				dicemesh.body.angularVelocity = new CANNON.Vec3(25, 25, 25);
+				dicemesh.body.velocity = new CANNON.Vec3(0, 0, 3000);
+			})
+			this.animateThrow(this.running, () => {
+				const results = diceIdArray.map(dieId => this.getDiceResults(dieId))
+				console.log('reroll results :>> ', results);
+				resolve(results)
+			})
+		})
+	}
 
-		if (notationVectors.error) {
+	rollDice(callback){
+
+		if (this.notationVectors.error) {
 			callback.call(this);
 			return;
 		}
 
-		this.camera.position.z = this.cameraHeight.far;
+		// this.camera.position.z = this.cameraHeight.far;
 		this.clearDice();
 
-		for (let i=0, len=notationVectors.vectors.length; i < len; ++i) {
-			this.spawnDice(notationVectors.vectors[i]);
+		for (let i=0, len=this.notationVectors.vectors.length; i < len; ++i) {
+			this.spawnDice(this.notationVectors.vectors[i]);
 		}
-		this.simulateThrow(notationVectors);
+		this.simulateThrow();
 		this.steps = 0;
 		this.iteration = 0;
 		
-		//reset dice vectors
-		for (let i=0, len=this.diceList.length; i < len; ++i) {
-			if (!this.diceList[i]) continue;
-
-			this.resetDice(this.diceList[i], notationVectors.vectors[i]);
-		}
-
 		//check forced results, fix dice faces if necessary
-		if (notationVectors.result && notationVectors.result.length > 0) {
-			for (let i=0;i<notationVectors.result.length;i++) {
+		if (this.notationVectors.result && this.notationVectors.result.length > 0) {
+			for (let i=0;i<this.notationVectors.result.length;i++) {
 				let dicemesh = this.diceList[i];
 				if (!dicemesh) continue;
-				if (dicemesh.getLastValue().value == notationVectors.result[i]) continue;
-				this.swapDiceFace(dicemesh, notationVectors.result[i]);
+				if (dicemesh.getLastValue().value == this.notationVectors.result[i]) continue;
+				this.swapDiceFace(dicemesh, this.notationVectors.result[i]);
 			}
 		}
-
-		//reset the result
+		
 		for (let i=0, len=this.diceList.length; i < len; ++i) {
 			if (!this.diceList[i]) continue;
-
-			// if (this.diceList[i].resultReason != 'forced') {
-				this.diceList[i].result = [];
-			// }
+			
+			//reset dice vectors
+			this.resetDice(this.diceList[i], this.notationVectors.vectors[i]);
+			//reset the result
+			this.diceList[i].result = [];
 		}
 
 		// animate the previously simulated roll
 		this.rolling = true;
-		this.running = (new Date()).getTime();
+		this.running = Date.now();
 		this.last_time = 0;
-		this.animateThrow(this.running, callback, notationVectors);
+		this.animateThrow(this.running, callback);
 
 	}
 }
