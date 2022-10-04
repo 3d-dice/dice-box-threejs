@@ -29,7 +29,8 @@ const defaultConfig = {
 	iterationLimit: 1000,
 	onRollComplete: () => {},
 	onRerollComplete: () => {},
-	onAddDiceComplete: () => {}
+	onAddDiceComplete: () => {},
+	onRemoveDiceComplete: () => {},
 }
 
 class DiceBox {
@@ -933,20 +934,25 @@ class DiceBox {
 		}
 		let counter = 0
 		const modifier = this.notationVectors.constant ? parseInt(`${this.notationVectors.op}${this.notationVectors.constant}`) : 0
+		let rollTotal = modifier
 		const result = {
 			notation: this.notationVectors.notation,
 			sets: this.notationVectors.set.map(set => {
 				const endCount = counter + set.num - 1
-				let total = 0
+				let setTotal = 0
 				const rolls = []
 				for (let index = counter; index <= endCount; index++) {
+					if(this.diceList[counter].result.at(-1).reason === "remove") {
+						counter++
+						continue
+					}
 					rolls.push({
 						type: set.type,
 						sides: parseInt(set.type.substring(1)),
 						id: counter,
 						...this.diceList[counter].result.at(-1)
 					})
-					total += this.diceList[counter].result.at(-1).value
+					setTotal += this.diceList[counter].result.at(-1).value
 					counter++
 				}
 				const returnSet = {
@@ -954,12 +960,13 @@ class DiceBox {
 					type: set.type,
 					sides: parseInt(set.type.substring(1)),
 					rolls,
-					total,
+					total: setTotal,
 				}
+				rollTotal += setTotal
 				return returnSet
 			}),
 			modifier,
-			total: this.diceList.reduce((total,val) => total + val.result.at(-1).value, modifier)
+			total: rollTotal
 		}
 		return result
 	}
@@ -1073,6 +1080,31 @@ class DiceBox {
 			this.running = Date.now();
 			this.last_time = 0;
 			this.animateThrow(this.running, callback);
+		})
+	}
+
+	async remove(diceIdArray){
+		
+		return new Promise((resolve,reject) => {
+			const results = []
+			diceIdArray.forEach(dieId => {
+				const mesh = this.diceList[dieId]
+				if (mesh.body) this.world.removeBody(mesh.body);
+				this.scene.remove(mesh);
+				mesh.storeRolledValue('remove');
+				results.push(this.getDiceResults(dieId))
+			})
+
+			this.renderer.render(this.scene, this.camera);
+
+			this.onRemoveDiceComplete(results)
+
+			// dispatch an event with the results object for other UI elements to listen for
+			const event = new CustomEvent('removeDiceComplete', {detail: results})
+			document.dispatchEvent(event)
+
+			resolve(results)
+
 		})
 	}
 
