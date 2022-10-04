@@ -20,36 +20,52 @@ export class DiceNotation {
 		this.result = [];
 		this.error = false;
 		this.boost = 1;
-		this.notation = notation;
+		this.notation = "";
 		this.vectors = [];
-		this.owner = -1;
+		// this.owner = -1;
 
 		if (!notation || notation =='0') {
 			this.error = true;
 		}
 
-		let notationdata = this.notation;
-		let no, notationstring
+		this.parseNotation(notation)
 
-		if (notationdata) {
-			let rage = (notationdata.split('!').length-1) || 0;
+	}
+
+	parseNotation(notation){
+		if (notation) {
+			let rage = (notation.split('!').length-1) || 0;
 			if (rage > 0) {
 				this.boost = Math.min(Math.max(rage, 0), 3) * 4;
 			}
-			notationdata = notationdata.split('!').join(''); //remove and continue
-			notationdata = notationdata.split(' ').join(''); // remove spaces
+			notation = notation.split('!').join(''); //remove and continue
+			notation = notation.split(' ').join(''); // remove spaces
 	
 			//count group starts and ends
-			let groupstarts = notationdata.split('(').length-1;
-			let groupends = notationdata.split(')').length-1;
+			let groupstarts = notation.split('(').length-1;
+			let groupends = notation.split(')').length-1;
 			if (groupstarts != groupends) this.error = true;
-	
-			no = notationdata.split('@');// 0: dice notations, 1: forced results
-			notationstring = no[0];
 		}
-
+		const op = this.notation.length > 0 ? "+" : ""
+		this.notation += op + notation
+		
+		let no = notation.split('@');// 0: dice notations, 1: forced results
+		let notationstring = no[0];
 		//let rollregex = new RegExp(/(\+|\-|\*|\/|\%|\^|){0,1}(\(*|)(\d*)([a-z]{1,5}\d+|[a-z]{1,5}|)(?:\{([a-z]+)(.*?|)\}|)(\)*|)/, 'i');
-		let rollregex = new RegExp(/(\+|\-|\*|\/|\%|\^|){0,1}()(\d*)([a-z]+\d+|[a-z]+|)(?:\{([a-z]+)(.*?|)\}|)()/, 'i');
+		let rollregex = new RegExp(/(\+|\-|\*|\/|\%|\^|){0,1}()(\d*)([a-z]+\d+|[a-z]+|)(?:\{([a-z]+)(.*?|)\}|)()/, 'i'); // don't like this one
+
+		// TODO: new Regex for notation
+		// let rollregex = new RegExp(/([+\-*/%^]{0,1})(\d+)(d+|[a-zA-Z]+)([a-zA-Z]+|\d*)([+\-]{1}\d+(?![a-z]))?(?:\{([a-z]+),?(.*?)\}|)(?=@([\S ]*)|)/, 'i');
+		// rollregex breakdown - "i" = case insensitive match
+		// 1st group: ([+\-*/%^]{0,1}) :optional - mathmatical operator for the group
+		// 2nd group (\d+) :required - must be a digit indication number of dice
+		// 3rd group (d+|[a-z]+) :required - the letter "d" or text describing the die type
+		// 4th group ([a-z]+|\d*) :optional - text describing the die type or a number indicating the number of sides on the die
+		// 5th group ([+\-]{1}\d+(?![a-z]))? :optional - modifier such as +3 or -5
+		// 6th group (?:\{([a-z]+),?(.*?)\}|) :optional - roll functions such as "{r,2}" indicating "reroll all 2s"
+		// 7th group (?=@([\S ]*)|) :optional - predetermined results such as "@4,4,4" which forces the first three dice rolls to resolve as "4"
+		// TODO: roll groups
+
 		let resultsregex = new RegExp(/(\b)*(\-\d+|\d+)(\b)*/, 'gi'); // forced results: '1, 2, 3' or '1 2 3'
 		let res;
 
@@ -57,7 +73,6 @@ export class DiceNotation {
 		let breaklimit = 30;
 		let groupLevel = 0;
 		let groupID = 0;
-
 		// dice notations
 		// let notationstring = no[0];
 		while (!this.error && notationstring.length > 0 && (res = rollregex.exec(notationstring)) !== null && runs < breaklimit) {
@@ -115,6 +130,7 @@ export class DiceNotation {
 			this.result.push(...res);
 		}
 	}
+
 
 	stringify(full = true) {
 
@@ -182,6 +198,31 @@ export class DiceNotation {
 		}
 
 		if (!update) ++this.setid;
+	}
+
+	// TODO:
+	// eliminate boost, groups, owner, gid, glvl
+	// set totalDice
+
+	static mergeNotation(prevNotation, newNotation){
+		// let our vectors combine
+		const newNotationVectors = {
+			...prevNotation,
+			constant: prevNotation.constant + newNotation.constant,
+			notation: prevNotation.notation + "+" + newNotation.notation,
+			set: [
+				...prevNotation.set,
+				...newNotation.set
+			],
+			totalDice: prevNotation.vectors.length + newNotation.vectors.length,
+			vectors: [
+				...prevNotation.vectors,
+				...newNotation.vectors
+			]
+		}
+
+		return newNotationVectors
+
 	}
 
 }

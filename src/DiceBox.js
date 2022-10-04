@@ -27,7 +27,9 @@ const defaultConfig = {
 	baseScale: 100,
 	strength: 1,
 	iterationLimit: 1000,
-	onRollComplete: () => {}
+	onRollComplete: () => {},
+	onRerollComplete: () => {},
+	onAddDiceComplete: () => {}
 }
 
 class DiceBox {
@@ -79,6 +81,7 @@ class DiceBox {
 		this.meshes = [];
 		this.diceList = [];
 		this.notationVectors = null
+		this.dieIndex = 0
 
 		//public variables
 		// this.framerate = (1/60);
@@ -88,7 +91,7 @@ class DiceBox {
 		// this.sound_dieMaterial = 'plastic'
 		this.soundDelay = 10; // time between sound effects in ms
 		this.animstate = '';
-		this.tally = true;
+		// this.tally = true;
 
 
 		this.selector = {
@@ -407,9 +410,7 @@ class DiceBox {
 	//returns an array of vectordata objects
 	getNotationVectors(notation, vector, boost, dist){
 
-		
 		let notationVectors = new DiceNotation(notation);
-
 
 		for (let i in notationVectors.set) {
 
@@ -486,6 +487,7 @@ class DiceBox {
 				}
 
 				notationVectors.vectors.push({ 
+					index: this.dieIndex++,
 					type: diceobj.type, 
 					op: operator,
 					sid: sid,  
@@ -625,6 +627,7 @@ class DiceBox {
 		let dicemesh = this.DiceFactory.create(vectordata.type, this.colorData);
 		if(!dicemesh) return;
 
+		dicemesh.dieId = vectordata.index
 		dicemesh.notation = vectordata;
 		dicemesh.result = [];
 		dicemesh.stopped = 0;
@@ -827,7 +830,7 @@ class DiceBox {
 		++this.iteration;
 		let neededSteps = Math.floor(time_diff / this.framerate);
 
-		this.container.style.opacity = '1';
+		// this.container.style.opacity = '1';
 
 		for(let i = 0; i < neededSteps; i++) {
 			this.world.step(this.framerate);
@@ -902,7 +905,9 @@ class DiceBox {
 		let dist = Math.sqrt(vector.x * vector.x + vector.y * vector.y) + 100;
 		let boost = (Math.random() + 3) * dist * this.strength;
 
-		return this.getNotationVectors(notation, vector, boost, dist);
+		const notationVectors = this.getNotationVectors(notation, vector, boost, dist);
+
+		return notationVectors
 	}
 
 	clearDice() {
@@ -997,9 +1002,77 @@ class DiceBox {
 			})
 			this.animateThrow(this.running, () => {
 				const results = diceIdArray.map(dieId => this.getDiceResults(dieId))
-				console.log('reroll results :>> ', results);
+
+				this.onRerollComplete(results)
+				
+				// dispatch an event with the results object for other UI elements to listen for
+				const event = new CustomEvent('rerollComplete', {detail: results})
+				document.dispatchEvent(event)
+
 				resolve(results)
 			})
+		})
+	}
+
+	async add(notationSting){
+		let addNotationVectors = this.startClickThrow(notationSting)
+		let dieCount = this.diceList.length
+		let diceIdArray = []
+
+		for (let i=0, len=addNotationVectors.vectors.length; i < len; ++i) {
+			this.spawnDice(addNotationVectors.vectors[i]);
+		}
+
+		this.simulateThrow();
+		this.steps = 0;
+		this.iteration = 0;
+
+		//check forced results, fix dice faces if necessary
+		if (addNotationVectors.result && addNotationVectors.result.length > 0) {
+			for (let i=0;i<addNotationVectors.result.length;i++) {
+				const index = dieCount + i
+				let dicemesh = this.diceList[index];
+				if (!dicemesh) continue;
+				if (dicemesh.getLastValue().value == addNotationVectors.result[i]) continue;
+				this.swapDiceFace(dicemesh, addNotationVectors.result[i]);
+			}
+		}
+		
+		//reset dice vectors - for just the dice added
+		for (let i=0, len=addNotationVectors.vectors.length; i < len; ++i) {
+			const index = dieCount + i
+			if (!this.diceList[index]) continue;
+
+			//reset dice vectors
+			this.resetDice(this.diceList[index], addNotationVectors.vectors[i]);
+			//reset the result
+			this.diceList[index].result = [];
+			diceIdArray.push(index)
+		}
+
+		// let our vectors combine
+		this.notationVectors = DiceNotation.mergeNotation(this.notationVectors, addNotationVectors)
+
+		return new Promise((resolve,reject) => {
+			const callback = () => {
+				const results = diceIdArray.map(dieId => this.getDiceResults(dieId))
+	
+				// setting up a couple of ways to consume the dice added results
+				// call onAddDiceComplete 
+				this.onAddDiceComplete(results)
+	
+				// dispatch an event with the results object for other UI elements to listen for
+				const event = new CustomEvent('addDiceComplete', {detail: results})
+				document.dispatchEvent(event)
+	
+				resolve(results)
+			}
+
+			// animate the previously simulated roll
+			this.rolling = true;
+			this.running = Date.now();
+			this.last_time = 0;
+			this.animateThrow(this.running, callback);
 		})
 	}
 
