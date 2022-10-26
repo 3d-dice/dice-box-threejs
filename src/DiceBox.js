@@ -1014,8 +1014,10 @@ class DiceBox {
 	}
 
 	async add(notationSting){
-		let addNotationVectors = this.startClickThrow(notationSting)
 		let dieCount = this.diceList.length
+		if(!dieCount) return this.roll(notationSting)
+
+		let addNotationVectors = this.startClickThrow(notationSting)
 		let diceIdArray = []
 
 		for (let i=0, len=addNotationVectors.vectors.length; i < len; ++i) {
@@ -1043,7 +1045,7 @@ class DiceBox {
 			if (!this.diceList[index]) continue;
 
 			//reset dice vectors
-			this.resetDice(this.diceList[index], addNotationVectors.vectors[i]);
+			this.spawnDice(addNotationVectors.vectors[i], this.diceList[index]);
 			//reset the result
 			this.diceList[index].result = [];
 			diceIdArray.push(index)
