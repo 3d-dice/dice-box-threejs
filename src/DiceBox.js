@@ -1028,6 +1028,16 @@ class DiceBox {
 		this.steps = 0;
 		this.iteration = 0;
 
+		//reset dice vectors - for just the dice added
+		for (let i=0, len=addNotationVectors.vectors.length; i < len; ++i) {
+			const index = dieCount + i
+			if (!this.diceList[index]) continue;
+
+			//reset dice vectors
+			this.spawnDice(addNotationVectors.vectors[i], this.diceList[index]);
+			diceIdArray.push(index)
+		}
+
 		//check forced results, fix dice faces if necessary
 		if (addNotationVectors.result && addNotationVectors.result.length > 0) {
 			for (let i=0;i<addNotationVectors.result.length;i++) {
@@ -1039,17 +1049,7 @@ class DiceBox {
 			}
 		}
 		
-		//reset dice vectors - for just the dice added
-		for (let i=0, len=addNotationVectors.vectors.length; i < len; ++i) {
-			const index = dieCount + i
-			if (!this.diceList[index]) continue;
 
-			//reset dice vectors
-			this.spawnDice(addNotationVectors.vectors[i], this.diceList[index]);
-			//reset the result
-			this.diceList[index].result = [];
-			diceIdArray.push(index)
-		}
 
 		// let our vectors combine
 		this.notationVectors = DiceNotation.mergeNotation(this.notationVectors, addNotationVectors)
