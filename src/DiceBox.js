@@ -591,6 +591,7 @@ class DiceBox {
 		}
 
 		dicemesh.geometry = geom;
+		dicemesh.result = [];
 	}
 
 	swapDiceFace_D4(dicemesh, result) {
@@ -624,21 +625,32 @@ class DiceBox {
 	}
 
 	//spawns one dicemesh object from a single vectordata object
-	spawnDice(vectordata) {
-		let dicemesh = this.DiceFactory.create(vectordata.type, this.colorData);
-		if(!dicemesh) return;
+	spawnDice(vectordata, reset = false) {
+		const {pos, axis, angle, velocity} = vectordata
+		let dicemesh
+		
+		if(!reset) {
+			dicemesh = this.DiceFactory.create(vectordata.type, this.colorData);
+			if(!dicemesh) return;
+			dicemesh.notation = vectordata;
+			dicemesh.result = [];
+			dicemesh.stopped = 0;
+			dicemesh.castShadow = this.shadows;
+			this.scene.add(dicemesh);
+			this.diceList.push(dicemesh);
+		} else {
+			dicemesh = reset
+			// dicemesh.result = [];
+			dicemesh.stopped = 0;
+			this.world.removeBody(dicemesh.body);
+		}
 
-		dicemesh.dieId = vectordata.index
-		dicemesh.notation = vectordata;
-		dicemesh.result = [];
-		dicemesh.stopped = 0;
-		dicemesh.castShadow = this.shadows;
 		dicemesh.body = new CANNON.Body({allowSleep: true, sleepSpeedLimit: 75, sleepTimeLimit:0.9, mass: dicemesh.mass, shape: dicemesh.geometry.cannon_shape, material: this.dice_body_material});
 		dicemesh.body.type = CANNON.Body.DYNAMIC;
-		dicemesh.body.position.set(vectordata.pos.x, vectordata.pos.y, vectordata.pos.z);
-		dicemesh.body.quaternion.setFromAxisAngle(new CANNON.Vec3(vectordata.axis.x, vectordata.axis.y, vectordata.axis.z), vectordata.axis.a * Math.PI * 2);
-		dicemesh.body.angularVelocity.set(vectordata.angle.x, vectordata.angle.y, vectordata.angle.z);
-		dicemesh.body.velocity.set(vectordata.velocity.x, vectordata.velocity.y, vectordata.velocity.z);
+		dicemesh.body.position.set(pos.x, pos.y, pos.z);
+		dicemesh.body.quaternion.setFromAxisAngle(new CANNON.Vec3(axis.x, axis.y, axis.z), axis.a * Math.PI * 2);
+		dicemesh.body.angularVelocity.set(angle.x, angle.y, angle.z);
+		dicemesh.body.velocity.set(velocity.x, velocity.y, velocity.z);
 		dicemesh.body.linearDamping = 0.1;
 		dicemesh.body.angularDamping = 0.1;
 		dicemesh.body.diceShape = dicemesh.shape;
@@ -646,8 +658,6 @@ class DiceBox {
 
 		dicemesh.body.addEventListener('collide', this.eventCollide.bind(this));
 
-		this.scene.add(dicemesh);
-		this.diceList.push(dicemesh);
 		this.world.addBody(dicemesh.body);
 	}
 
@@ -728,24 +738,6 @@ class DiceBox {
 
 		this.lastSoundStep = body.world.stepnumber;
 		this.lastSound = now + this.soundDelay;
-	}
-
-	//resets vectors on dice back to startign notation values for a roll after simulation.
-	resetDice(dicemesh, {pos, axis, angle, velocity}) {
-		dicemesh.stopped = 0;
-		// this.world.removeBody(dicemesh.body);
-		// dicemesh.body = new CANNON.Body({allowSleep: true, sleepSpeedLimit: 75, sleepTimeLimit:0.9, mass: dicemesh.body.mass, shape: dicemesh.geometry.cannon_shape, material: this.dice_body_material});
-		dicemesh.body.type = CANNON.Body.DYNAMIC;
-		dicemesh.body.position.set(pos.x, pos.y, pos.z);
-		dicemesh.body.quaternion.setFromAxisAngle(new CANNON.Vec3(axis.x, axis.y, axis.z), axis.a * Math.PI * 2);
-		dicemesh.body.angularVelocity.set(angle.x, angle.y, angle.z);
-		dicemesh.body.velocity.set(velocity.x, velocity.y, velocity.z);
-		// dicemesh.body.linearDamping = 0.1;
-		// dicemesh.body.angularDamping = 0.1;
-		// dicemesh.body.diceShape = dicemesh.shape;
-		// dicemesh.body.addEventListener('collide', this.eventCollide.bind(this));
-		// this.world.addBody(dicemesh.body);
-		dicemesh.body.sleepState = 0;
 	}
 
 	checkForRethrow(dicemesh) {
@@ -1124,6 +1116,13 @@ class DiceBox {
 		this.simulateThrow();
 		this.steps = 0;
 		this.iteration = 0;
+
+		for (let i=0, len=this.diceList.length; i < len; ++i) {
+			if (!this.diceList[i]) continue;
+			
+			//reset dice vectors
+			this.spawnDice(this.notationVectors.vectors[i],this.diceList[i]);
+		}
 		
 		//check forced results, fix dice faces if necessary
 		if (this.notationVectors.result && this.notationVectors.result.length > 0) {
@@ -1133,15 +1132,6 @@ class DiceBox {
 				if (dicemesh.getLastValue().value == this.notationVectors.result[i]) continue;
 				this.swapDiceFace(dicemesh, this.notationVectors.result[i]);
 			}
-		}
-		
-		for (let i=0, len=this.diceList.length; i < len; ++i) {
-			if (!this.diceList[i]) continue;
-			
-			//reset dice vectors
-			this.resetDice(this.diceList[i], this.notationVectors.vectors[i]);
-			//reset the result
-			this.diceList[i].result = [];
 		}
 
 		// animate the previously simulated roll
