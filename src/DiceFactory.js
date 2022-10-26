@@ -92,6 +92,7 @@ class DiceFactory {
 				}
 			}
 			let matindex = closest_face.materialIndex - 1;
+			let offset = 2
 
 			const diceobj = DiceFactory.dice[this.notation.type];
 
@@ -100,10 +101,14 @@ class DiceFactory {
 
 				return {value: matindex, label: diceobj.labels[matindex-1][labelindex2][0], reason: reason};
 			}
-			if (['d10','d2'].includes(this.shape)) matindex += 1;
+
+			if (['d10','d2'].includes(this.shape)) {
+				matindex += 1;
+				offset -= 1;
+			}
 
 			let value = diceobj.values[((matindex-1) % diceobj.values.length)];
-			let label = diceobj.labels[(((matindex-1) % (diceobj.labels.length-2))+2)];
+			let label = diceobj.labels[(((matindex-1) % (diceobj.labels.length-2))+offset)];
 			
 			return {value: value, label: label, reason: reason};
 		}
