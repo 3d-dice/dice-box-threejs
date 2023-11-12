@@ -98,7 +98,9 @@ export class DiceColors {
 		let defaultSet = COLORSETS["white"]
 		let colorset = Object.assign({},defaultSet,options)
 		// get texture data
-		let texture = this.getTexture(colorset.texture)
+
+		// console.log("custom texture", options.custom_texture);
+		let texture = options.custom_texture ? options.custom_texture : this.getTexture(colorset.texture)
 
 		// load textures
 		colorset.texture = await this.ImageLoader(texture)
@@ -130,6 +132,7 @@ export class DiceColors {
 		if (TEXTURELIST.hasOwnProperty(texturename)) {
 			return TEXTURELIST[texturename]
 		}
+
 		return TEXTURELIST['none']
 	}
 
